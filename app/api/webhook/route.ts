@@ -1,40 +1,49 @@
 import { NextResponse } from 'next/server';
 import { getBotResponse } from '@/app/lib/chatService';
-import fs from 'fs';
-import path from 'path';
+import { supabase } from '@/app/lib/supabase';
 
-// Reusing the DB helper from chat route (in a real app, this should be a shared utility)
-const DB_PATH = path.join(process.cwd(), 'knowledge_db.json');
+// Cache settings to avoid database calls on every request
+let cachedSettings: any = null;
+let settingsLastFetched = 0;
+const SETTINGS_CACHE_MS = 60000; // 1 minute cache
 
-const readDb = () => {
-    if (!fs.existsSync(DB_PATH)) {
-        return [];
+// Fetch settings from database with caching
+async function getSettings() {
+    const now = Date.now();
+    if (cachedSettings && now - settingsLastFetched < SETTINGS_CACHE_MS) {
+        return cachedSettings;
     }
-    const data = fs.readFileSync(DB_PATH, 'utf-8');
+
     try {
-        return JSON.parse(data);
-    } catch (e) {
-        return [];
-    }
-};
+        const { data, error } = await supabase
+            .from('bot_settings')
+            .select('*')
+            .limit(1)
+            .single();
 
-const SETTINGS_PATH = path.join(process.cwd(), 'settings.json');
+        if (error) {
+            console.error('Error fetching settings:', error);
+            return {
+                facebook_verify_token: 'TEST_TOKEN',
+                facebook_page_access_token: null,
+            };
+        }
 
-const readSettings = () => {
-    if (!fs.existsSync(SETTINGS_PATH)) {
-        return {};
+        cachedSettings = data;
+        settingsLastFetched = now;
+        return data;
+    } catch (error) {
+        console.error('Error fetching settings:', error);
+        return {
+            facebook_verify_token: 'TEST_TOKEN',
+            facebook_page_access_token: null,
+        };
     }
-    const data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
-    try {
-        return JSON.parse(data);
-    } catch (e) {
-        return {};
-    }
-};
+}
 
 export async function GET(req: Request) {
-    const settings = readSettings();
-    const VERIFY_TOKEN = settings.facebookVerifyToken || process.env.FACEBOOK_VERIFY_TOKEN || 'TEST_TOKEN';
+    const settings = await getSettings();
+    const VERIFY_TOKEN = settings.facebook_verify_token || process.env.FACEBOOK_VERIFY_TOKEN || 'TEST_TOKEN';
     const { searchParams } = new URL(req.url);
     const mode = searchParams.get('hub.mode');
     const token = searchParams.get('hub.verify_token');
@@ -115,8 +124,8 @@ export async function POST(req: Request) {
 
 // Send typing indicator to show bot is working
 async function sendTypingIndicator(sender_psid: string, on: boolean) {
-    const settings = readSettings();
-    const PAGE_ACCESS_TOKEN = settings.facebookPageAccessToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+    const settings = await getSettings();
+    const PAGE_ACCESS_TOKEN = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
     if (!PAGE_ACCESS_TOKEN) return;
 
@@ -159,8 +168,8 @@ async function handleMessage(sender_psid: string, received_message: string) {
 
 
 async function callSendAPI(sender_psid: string, response: any) {
-    const settings = readSettings();
-    const PAGE_ACCESS_TOKEN = settings.facebookPageAccessToken || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+    const settings = await getSettings();
+    const PAGE_ACCESS_TOKEN = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
 
     console.log('callSendAPI called, token present:', !!PAGE_ACCESS_TOKEN);
 
@@ -195,4 +204,3 @@ async function callSendAPI(sender_psid: string, response: any) {
         console.error('Unable to send message:', error);
     }
 }
-

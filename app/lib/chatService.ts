@@ -1,35 +1,41 @@
 import OpenAI from 'openai';
 import { searchDocuments } from './rag';
 import { supabase } from './supabase';
-import fs from 'fs';
-import path from 'path';
 
-const SETTINGS_PATH = path.join(process.cwd(), 'settings.json');
 const MAX_HISTORY = 10; // Reduced to prevent context overload
 
-// Cache settings to avoid file I/O on every request
+// Cache settings to avoid database calls on every request
 let cachedSettings: any = null;
 let settingsLastRead = 0;
 const SETTINGS_CACHE_MS = 60000; // 1 minute cache
 
-const readSettings = () => {
+// Fetch bot settings from database with caching
+async function getBotSettings() {
     const now = Date.now();
     if (cachedSettings && now - settingsLastRead < SETTINGS_CACHE_MS) {
         return cachedSettings;
     }
 
-    if (!fs.existsSync(SETTINGS_PATH)) {
-        return {};
-    }
-    const data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
     try {
-        cachedSettings = JSON.parse(data);
+        const { data, error } = await supabase
+            .from('bot_settings')
+            .select('*')
+            .limit(1)
+            .single();
+
+        if (error) {
+            console.error('Error fetching bot settings:', error);
+            return { bot_name: 'Assistant', bot_tone: 'helpful and professional' };
+        }
+
+        cachedSettings = data;
         settingsLastRead = now;
-        return cachedSettings;
-    } catch (e) {
-        return {};
+        return data;
+    } catch (error) {
+        console.error('Error fetching bot settings:', error);
+        return { bot_name: 'Assistant', bot_tone: 'helpful and professional' };
     }
-};
+}
 
 const client = new OpenAI({
     baseURL: 'https://integrate.api.nvidia.com/v1',
@@ -150,10 +156,10 @@ function storeMessageAsync(senderId: string, role: 'user' | 'assistant', content
 export async function getBotResponse(userMessage: string, senderId: string = 'web_default'): Promise<string> {
     const startTime = Date.now();
 
-    // Read bot configuration from settings (cached)
-    const settings = readSettings();
-    const botName = settings.botName || 'Assistant';
-    const botTone = settings.botTone || 'helpful and professional';
+    // Read bot configuration from database (cached)
+    const settings = await getBotSettings();
+    const botName = settings.bot_name || 'Assistant';
+    const botTone = settings.bot_tone || 'helpful and professional';
 
     // Store user message immediately (fire and forget)
     storeMessageAsync(senderId, 'user', userMessage);
@@ -258,5 +264,3 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
         return "Pasensya na po, may problema sa connection. Subukan ulit mamaya.";
     }
 }
-
-

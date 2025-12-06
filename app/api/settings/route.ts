@@ -1,40 +1,98 @@
 import { NextResponse } from 'next/server';
-import fs from 'fs';
-import path from 'path';
+import { supabase } from '@/app/lib/supabase';
 
-const SETTINGS_PATH = path.join(process.cwd(), 'settings.json');
-
-const readSettings = () => {
-    if (!fs.existsSync(SETTINGS_PATH)) {
-        return {};
-    }
-    const data = fs.readFileSync(SETTINGS_PATH, 'utf-8');
-    try {
-        return JSON.parse(data);
-    } catch (e) {
-        return {};
-    }
-};
-
-const writeSettings = (data: any) => {
-    fs.writeFileSync(SETTINGS_PATH, JSON.stringify(data, null, 2));
-};
-
+// GET - Fetch settings from database
 export async function GET() {
-    const settings = readSettings();
-    return NextResponse.json(settings);
+    try {
+        const { data, error } = await supabase
+            .from('bot_settings')
+            .select('*')
+            .limit(1)
+            .single();
+
+        if (error) {
+            console.error('Error fetching settings:', error);
+            // Return defaults if no settings exist
+            return NextResponse.json({
+                botName: 'Assistant',
+                botTone: 'helpful and professional',
+                facebookVerifyToken: 'TEST_TOKEN',
+                facebookPageAccessToken: '',
+            });
+        }
+
+        // Map database column names to frontend field names
+        return NextResponse.json({
+            botName: data.bot_name || 'Assistant',
+            botTone: data.bot_tone || 'helpful and professional',
+            facebookVerifyToken: data.facebook_verify_token || 'TEST_TOKEN',
+            facebookPageAccessToken: data.facebook_page_access_token || '',
+        });
+    } catch (error) {
+        console.error('Error:', error);
+        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    }
 }
 
+// POST - Update settings in database
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const currentSettings = readSettings();
-        const newSettings = { ...currentSettings, ...body };
 
-        writeSettings(newSettings);
+        // Map frontend field names to database column names
+        const updates: Record<string, any> = {
+            updated_at: new Date().toISOString(),
+        };
 
-        return NextResponse.json(newSettings);
+        if (body.botName !== undefined) updates.bot_name = body.botName;
+        if (body.botTone !== undefined) updates.bot_tone = body.botTone;
+        if (body.facebookVerifyToken !== undefined) updates.facebook_verify_token = body.facebookVerifyToken;
+        if (body.facebookPageAccessToken !== undefined) updates.facebook_page_access_token = body.facebookPageAccessToken;
+
+        // Check if settings row exists
+        const { data: existing } = await supabase
+            .from('bot_settings')
+            .select('id')
+            .limit(1)
+            .single();
+
+        if (existing) {
+            // Update existing row
+            const { error } = await supabase
+                .from('bot_settings')
+                .update(updates)
+                .eq('id', existing.id);
+
+            if (error) {
+                console.error('Error updating settings:', error);
+                return NextResponse.json({ error: 'Failed to update settings' }, { status: 500 });
+            }
+        } else {
+            // Insert new row
+            const { error } = await supabase
+                .from('bot_settings')
+                .insert({
+                    bot_name: body.botName || 'Assistant',
+                    bot_tone: body.botTone || 'helpful and professional',
+                    facebook_verify_token: body.facebookVerifyToken || 'TEST_TOKEN',
+                    facebook_page_access_token: body.facebookPageAccessToken || null,
+                });
+
+            if (error) {
+                console.error('Error inserting settings:', error);
+                return NextResponse.json({ error: 'Failed to create settings' }, { status: 500 });
+            }
+        }
+
+        // Return updated settings
+        return NextResponse.json({
+            botName: body.botName,
+            botTone: body.botTone,
+            facebookVerifyToken: body.facebookVerifyToken,
+            facebookPageAccessToken: body.facebookPageAccessToken,
+        });
     } catch (error) {
+        console.error('Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
     }
 }
