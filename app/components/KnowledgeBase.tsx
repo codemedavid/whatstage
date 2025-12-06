@@ -31,22 +31,6 @@ export default function KnowledgeBase({ onSelect }: KnowledgeBaseProps) {
   const [bulkMode, setBulkMode] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    fetchKnowledge();
-    fetchFolders();
-  }, []);
-
-  useEffect(() => {
-    const handleClickOutside = (e: MouseEvent) => {
-      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
-        setContextMenu(null);
-        setShowMoveMenu(null);
-      }
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, []);
-
   const fetchKnowledge = async () => {
     try {
       const res = await fetch('/api/knowledge');
@@ -68,6 +52,24 @@ export default function KnowledgeBase({ onSelect }: KnowledgeBaseProps) {
       console.error('Failed to fetch folders:', error);
     }
   };
+
+  useEffect(() => {
+    fetchKnowledge();
+    fetchFolders();
+  }, []);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
+        setShowMoveMenu(null);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
+
+
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) return;

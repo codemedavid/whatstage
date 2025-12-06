@@ -5,6 +5,7 @@ import { supabase } from './supabase';
 const MAX_HISTORY = 10; // Reduced to prevent context overload
 
 // Cache settings to avoid database calls on every request
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 let cachedSettings: any = null;
 let settingsLastRead = 0;
 const SETTINGS_CACHE_MS = 60000; // 1 minute cache
@@ -56,6 +57,7 @@ async function getBotRules(): Promise<string[]> {
             return [];
         }
 
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         return rules?.map((r: any) => r.rule) || [];
     } catch (error) {
         console.error('Error fetching bot rules:', error);
@@ -214,6 +216,7 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
         const llmStart = Date.now();
 
         // Use DeepSeek 3.1 with streaming and thinking enabled
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const stream: any = await client.chat.completions.create({
             model: "deepseek-ai/deepseek-v3.1",
             messages,
@@ -229,6 +232,7 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
         // Process the stream
         for await (const chunk of stream) {
             // Collect reasoning (thinking) content
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const reasoning = (chunk.choices[0]?.delta as any)?.reasoning_content;
             if (reasoning) {
                 reasoningContent += reasoning;
@@ -259,6 +263,7 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
 
         console.log(`Total response time: ${Date.now() - startTime}ms`);
         return responseContent;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
     } catch (error: any) {
         console.error("Error calling NVIDIA API:", error.response?.data || error.message || error);
         return "Pasensya na po, may problema sa connection. Subukan ulit mamaya.";

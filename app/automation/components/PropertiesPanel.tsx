@@ -16,6 +16,32 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
     const [description, setDescription] = useState('');
     const [messageMode, setMessageMode] = useState('custom');
     const [messageText, setMessageText] = useState('');
+    const [triggerStageId, setTriggerStageId] = useState('');
+    const [stages, setStages] = useState<Array<{ id: string; name: string }>>([]);
+    const [waitDuration, setWaitDuration] = useState('5');
+    const [waitUnit, setWaitUnit] = useState('minutes');
+    const [stopBotReason, setStopBotReason] = useState('');
+    const [conditionType, setConditionType] = useState('has_replied');
+    const [conditionRule, setConditionRule] = useState('');
+
+    useEffect(() => {
+        // Fetch pipeline stages
+        fetch('/api/pipeline/stages')
+            .then(res => res.json())
+            .then(data => {
+                // Ensure data is an array
+                if (Array.isArray(data)) {
+                    setStages(data);
+                } else {
+                    console.error('Stages API did not return an array:', data);
+                    setStages([]);
+                }
+            })
+            .catch(err => {
+                console.error('Error fetching stages:', err);
+                setStages([]);
+            });
+    }, []);
 
     useEffect(() => {
         if (selectedNode) {
@@ -23,6 +49,12 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
             setDescription(selectedNode.data.description as string || '');
             setMessageMode(selectedNode.data.messageMode as string || 'custom');
             setMessageText(selectedNode.data.messageText as string || '');
+            setTriggerStageId(selectedNode.data.triggerStageId as string || '');
+            setWaitDuration(selectedNode.data.duration as string || '5');
+            setWaitUnit(selectedNode.data.unit as string || 'minutes');
+            setStopBotReason(selectedNode.data.reason as string || '');
+            setConditionType(selectedNode.data.conditionType as string || 'has_replied');
+            setConditionRule(selectedNode.data.conditionRule as string || '');
         }
     }, [selectedNode]);
 
@@ -35,6 +67,12 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
             description,
             messageMode,
             messageText,
+            triggerStageId,
+            duration: waitDuration,
+            unit: waitUnit,
+            reason: stopBotReason,
+            conditionType,
+            conditionRule,
         };
         onUpdate(selectedNode.id, updatedData);
     };
@@ -115,16 +153,22 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
 
                 {selectedNode.data.type === 'trigger' && (
                     <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Pipeline Stage</label>
+                        <label className="block text-xs font-medium text-gray-500 mb-1">Pipeline Stage Trigger</label>
                         <select
-                            // value={pipelineStage} 
-                            // onChange={(e) => setPipelineStage(e.target.value)}
+                            value={triggerStageId}
+                            onChange={(e) => setTriggerStageId(e.target.value)}
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
                         >
-                            <option value="new_lead">New Lead</option>
-                            <option value="contacted">Contacted</option>
-                            <option value="meeting">Meeting Booked</option>
+                            <option value="">Select a stage...</option>
+                            {Array.isArray(stages) && stages.map((stage) => (
+                                <option key={stage.id} value={stage.id}>
+                                    {stage.name}
+                                </option>
+                            ))}
                         </select>
+                        <p className="text-xs text-gray-400 mt-1">
+                            Workflow triggers when a lead enters this stage
+                        </p>
                     </div>
                 )}
 
@@ -134,13 +178,20 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                             <label className="block text-xs font-medium text-gray-500 mb-1">Duration</label>
                             <input
                                 type="number"
+                                value={waitDuration}
+                                onChange={(e) => setWaitDuration(e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                 placeholder="5"
+                                min="1"
                             />
                         </div>
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-gray-500 mb-1">Unit</label>
-                            <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
+                            <select
+                                value={waitUnit}
+                                onChange={(e) => setWaitUnit(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            >
                                 <option value="minutes">Minutes</option>
                                 <option value="hours">Hours</option>
                                 <option value="days">Days</option>
@@ -154,6 +205,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         <label className="block text-xs font-medium text-gray-500 mb-1">Reason (Optional)</label>
                         <input
                             type="text"
+                            value={stopBotReason}
+                            onChange={(e) => setStopBotReason(e.target.value)}
                             placeholder="e.g. User opted out"
                             className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
@@ -164,19 +217,27 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                     <div className="space-y-3">
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Condition Type</label>
-                            <select className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white">
+                            <select
+                                value={conditionType}
+                                onChange={(e) => setConditionType(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            >
                                 <option value="has_replied">User Has Replied?</option>
                                 <option value="ai_rule">Custom AI Rule</option>
                             </select>
                         </div>
-                        <div>
-                            <label className="block text-xs font-medium text-gray-500 mb-1">Rule Detail</label>
-                            <textarea
-                                rows={2}
-                                placeholder="e.g. Check if user is interested"
-                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
-                            />
-                        </div>
+                        {conditionType === 'ai_rule' && (
+                            <div>
+                                <label className="block text-xs font-medium text-gray-500 mb-1">Rule Detail</label>
+                                <textarea
+                                    value={conditionRule}
+                                    onChange={(e) => setConditionRule(e.target.value)}
+                                    rows={2}
+                                    placeholder="e.g. Check if user is interested"
+                                    className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
+                                />
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

@@ -32,7 +32,7 @@ interface PipelineStage {
 export async function getOrCreateLead(senderId: string, pageAccessToken?: string): Promise<Lead | null> {
     try {
         // Check if lead exists
-        const { data: existing, error: fetchError } = await supabase
+        const { data: existing } = await supabase
             .from('leads')
             .select('*')
             .eq('sender_id', senderId)
@@ -334,7 +334,7 @@ export async function getLeadsByStage(): Promise<Record<string, Lead[]>> {
         // Group by stage
         const grouped: Record<string, Lead[]> = {};
         for (const lead of leads || []) {
-            const stageName = (lead as any).pipeline_stages?.name || 'Unassigned';
+            const stageName = (lead as unknown as { pipeline_stages?: { name: string } }).pipeline_stages?.name || 'Unassigned';
             if (!grouped[stageName]) {
                 grouped[stageName] = [];
             }

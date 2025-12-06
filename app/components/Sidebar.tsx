@@ -18,7 +18,7 @@ export default function Sidebar() {
     const navItems = [
         { icon: LayoutGrid, href: '/', label: 'Dashboard' },
         { icon: Kanban, href: '/pipeline', label: 'Pipeline' },
-        { icon: Workflow, href: '/automation', label: 'Automation' },
+        { icon: Workflow, href: '/workflows', label: 'Workflows' },
         { icon: Settings, href: '/settings', label: 'Settings' },
     ];
 
@@ -40,8 +40,8 @@ export default function Sidebar() {
                             key={item.href}
                             href={item.href}
                             className={`p-2 rounded-lg transition-colors ${isActive
-                                    ? 'text-white bg-white/10'
-                                    : 'hover:text-white hover:bg-white/10'
+                                ? 'text-white bg-white/10'
+                                : 'hover:text-white hover:bg-white/10'
                                 }`}
                             title={item.label}
                         >

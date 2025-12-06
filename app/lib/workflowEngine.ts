@@ -1,5 +1,5 @@
 import { supabase } from './supabase';
-import { sendMessengerMessage, sendWithAccountUpdateTag, disableBotForLead } from './messengerService';
+import { sendMessengerMessage, disableBotForLead } from './messengerService';
 import { getBotResponse } from './chatService';
 
 interface WorkflowNode {
@@ -9,6 +9,7 @@ interface WorkflowNode {
         type: string;
         label: string;
         description?: string;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         [key: string]: any;
     };
 }

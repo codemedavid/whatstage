@@ -213,7 +213,7 @@ export default function RulesEditor() {
                         <div className="divide-y divide-gray-100">
                             {rules.length === 0 ? (
                                 <div className="p-8 text-center text-gray-500">
-                                    No rules added yet. Add rules above to control your bot's behavior.
+                                    No rules added yet. Add rules above to control your bot&apos;s behavior.
                                 </div>
                             ) : (
                                 rules.map((rule, index) => (

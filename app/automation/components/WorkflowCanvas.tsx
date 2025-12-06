@@ -39,13 +39,22 @@ const initialEdges: Edge[] = [];
 interface WorkflowCanvasContentProps {
     onSave?: (workflowData: { nodes: Node[]; edges: Edge[] }) => void;
     isSaving?: boolean;
+    initialData?: { nodes: Node[]; edges: Edge[] } | null;
 }
 
-function WorkflowCanvasContent({ onSave, isSaving }: WorkflowCanvasContentProps) {
+function WorkflowCanvasContent({ onSave, isSaving, initialData }: WorkflowCanvasContentProps) {
     const [nodes, setNodes, onNodesChange] = useNodesState(initialNodes);
     const [edges, setEdges, onEdgesChange] = useEdgesState(initialEdges);
     const [selectedNode, setSelectedNode] = useState<Node | null>(null);
     const { screenToFlowPosition, setCenter } = useReactFlow();
+
+    // Load initial data if provided
+    useEffect(() => {
+        if (initialData?.nodes && initialData?.edges) {
+            setNodes(initialData.nodes);
+            setEdges(initialData.edges);
+        }
+    }, [initialData, setNodes, setEdges]);
 
     // Auto-save with debounce
     useEffect(() => {

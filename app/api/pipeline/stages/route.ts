@@ -14,7 +14,7 @@ export async function GET() {
             return NextResponse.json({ error: 'Failed to fetch stages' }, { status: 500 });
         }
 
-        return NextResponse.json({ stages: stages || [] });
+        return NextResponse.json(stages || []);
     } catch (error) {
         console.error('Error:', error);
         return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });

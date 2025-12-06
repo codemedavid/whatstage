@@ -139,7 +139,7 @@ export default function StageColumn({ stage, onMoveLead, allStages }: StageColum
                                     }}
                                     title={lead.ai_classification_reason}
                                 >
-                                    "{lead.ai_classification_reason}"
+                                    &quot;{lead.ai_classification_reason}&quot;
                                 </p>
                             )}
 

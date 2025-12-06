@@ -1,6 +1,6 @@
 'use client';
 
-import { Search, Bell, ChevronRight, FileText, MoreVertical, Download, Share2, PenLine, Plus, Maximize2 } from 'lucide-react';
+import { Bell, ChevronRight, FileText, MoreVertical, Download, Share2, PenLine, Maximize2 } from 'lucide-react';
 
 export default function Header() {
     return (
