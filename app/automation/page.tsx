@@ -16,6 +16,22 @@ function AutomationPageContent() {
     const [isEditingName, setIsEditingName] = useState(false);
     const [initialWorkflowData, setInitialWorkflowData] = useState<any>(null);
     const [loading, setLoading] = useState(true);
+    const [showTestModal, setShowTestModal] = useState(false);
+    const [testLeads, setTestLeads] = useState<Array<{ id: string; sender_id: string; name: string | null }>>([]);
+    const [selectedTestLead, setSelectedTestLead] = useState('');
+    const [testingWorkflow, setTestingWorkflow] = useState(false);
+
+    useEffect(() => {
+        // Fetch leads for test dropdown
+        fetch('/api/pipeline/leads')
+            .then(res => res.json())
+            .then(data => {
+                if (data.leads && Array.isArray(data.leads)) {
+                    setTestLeads(data.leads);
+                }
+            })
+            .catch(err => console.error('Error fetching leads:', err));
+    }, []);
 
     useEffect(() => {
         if (workflowIdFromUrl) {
@@ -101,37 +117,43 @@ function AutomationPageContent() {
             alert('Please save the workflow first');
             return;
         }
+        setShowTestModal(true);
+    };
 
-        // Prompt for test data
-        const testLeadId = prompt('Enter test lead ID (from database):');
-        const testSenderId = prompt('Enter test sender ID (Facebook PSID):');
-
-        if (!testLeadId || !testSenderId) {
-            alert('Both lead ID and sender ID are required');
+    const executeTest = async () => {
+        if (!selectedTestLead) {
+            alert('Please select a lead');
             return;
         }
 
+        const lead = testLeads.find(l => l.id === selectedTestLead);
+        if (!lead) return;
+
+        setTestingWorkflow(true);
         try {
             const res = await fetch('/api/workflows/test', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     workflowId,
-                    leadId: testLeadId,
-                    senderId: testSenderId
+                    leadId: lead.id,
+                    senderId: lead.sender_id
                 }),
             });
 
             const data = await res.json();
 
             if (res.ok) {
-                alert('✅ Workflow execution started! Check the browser console and server logs for details.');
+                alert('✅ Workflow execution started! Check the server logs for details.');
+                setShowTestModal(false);
             } else {
                 alert(`❌ Error: ${data.error}`);
             }
         } catch (error) {
             console.error('Error testing workflow:', error);
             alert('Failed to test workflow');
+        } finally {
+            setTestingWorkflow(false);
         }
     };
 
@@ -198,6 +220,52 @@ function AutomationPageContent() {
                     />
                 )}
             </main>
+
+            {/* Test Run Modal */}
+            {showTestModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <h2 className="text-lg font-bold text-gray-900 mb-4">Test Workflow</h2>
+                        <p className="text-sm text-gray-500 mb-4">
+                            Select a lead to test this workflow with. The workflow will execute immediately.
+                        </p>
+
+                        <div className="mb-4">
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                                Select Lead
+                            </label>
+                            <select
+                                value={selectedTestLead}
+                                onChange={(e) => setSelectedTestLead(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            >
+                                <option value="">Choose a lead...</option>
+                                {testLeads.map((lead) => (
+                                    <option key={lead.id} value={lead.id}>
+                                        {lead.name || 'Unknown'} ({lead.sender_id.slice(0, 8)}...)
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowTestModal(false)}
+                                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={executeTest}
+                                disabled={testingWorkflow || !selectedTestLead}
+                                className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {testingWorkflow ? 'Running...' : 'Run Test'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
