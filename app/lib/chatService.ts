@@ -178,7 +178,14 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
     console.log('[RAG CONTEXT]:', context ? context.substring(0, 500) + '...' : 'NO CONTEXT RETRIEVED');
 
     // Build a natural conversation-focused system prompt
-    let systemPrompt = `You are ${botName}, a Filipino salesperson texting a customer about your product. You are ${botTone}.
+    let systemPrompt = `You are ${botName}, a friendly Filipino salesperson chatting with a customer via text message. Your personality: ${botTone}.
+
+CONVERSATION STYLE:
+- Be natural, warm, and conversational like a real salesperson
+- Use Taglish (mix of Tagalog and English) naturally
+- Use emojis sparingly (1-2 per message max)
+- Keep responses concise - this is texting, not email
+- Be helpful and proactive in offering information
 
 `;
 
@@ -190,25 +197,33 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
     }
 
     if (rules.length > 0) {
-        systemPrompt += `RULES TO FOLLOW:\n${rules.join('\n')}\n\n`;
+        systemPrompt += `BUSINESS RULES:\n${rules.join('\n')}\n\n`;
     }
 
-    // Critical grounding section - ensure AI only uses knowledge base
-    systemPrompt += `⚠️ STRICT KNOWLEDGE GROUNDING - FOLLOW EXACTLY:
+    // Balanced grounding - strict for facts, flexible for conversation
+    systemPrompt += `GROUNDING GUIDELINES:
 
-1. ONLY use information from the RULES and KNOWLEDGE BASE sections
-2. If a customer asks about PRICES, FEATURES, or DETAILS:
-   - ONLY quote EXACT info from the rules or knowledge base
-   - If the info is NOT available, say "Pasensya po, wala akong specific info tungkol dyan. Pwede po ba kayo mag-message sa aming team?"
-   - NEVER invent prices, features, or details
-3. NEVER use your training data or general knowledge - ONLY what's provided in rules and knowledge base
+For SPECIFIC FACTS (prices, features, availability, business details):
+- USE the information in KNOWLEDGE BASE if available
+- If asked about specific details NOT in the knowledge base, honestly say you need to check with the team
+- DO NOT make up specific numbers, prices, or features
+
+For GENERAL CONVERSATION (greetings, follow-ups, questions):
+- Be natural and helpful
+- You CAN engage in normal conversation
+- Guide customers toward your products/services
 
 `;
 
+    // Add knowledge base context - only if we have content
     if (context && context.trim().length > 0) {
-        systemPrompt += `=== KNOWLEDGE BASE ===\n${context}\n=== END KNOWLEDGE BASE ===\n\n`;
-    } else {
-        systemPrompt += `=== KNOWLEDGE BASE ===\nNo relevant info found for this query.\n=== END KNOWLEDGE BASE ===\n\n`;
+        systemPrompt += `=== KNOWLEDGE BASE ===
+${context}
+=== END KNOWLEDGE BASE ===
+
+Use the above information to answer questions about products, prices, and services.
+
+`;
     }
 
     // Build messages array with history
@@ -230,14 +245,14 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
     try {
         const llmStart = Date.now();
 
-        // Use Qwen3-235b for better accuracy and less hallucination
+        // Use Qwen3-235b with balanced settings
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const stream: any = await client.chat.completions.create({
             model: "qwen/qwen3-235b-a22b",
             messages,
-            temperature: 0.2,
-            top_p: 0.7,
-            max_tokens: 8192,
+            temperature: 0.6,  // Balanced - not too creative, not too rigid
+            top_p: 0.85,       // Allow more variety
+            max_tokens: 1024,  // Shorter responses for chat
             stream: true,
         });
 
