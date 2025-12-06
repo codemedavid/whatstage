@@ -2,7 +2,8 @@ import { NextResponse } from 'next/server';
 import { waitUntil } from '@vercel/functions';
 import { getBotResponse } from '@/app/lib/chatService';
 import { supabase } from '@/app/lib/supabase';
-import { getOrCreateLead, incrementMessageCount, shouldAnalyzeStage, analyzeAndUpdateStage } from '@/app/lib/pipelineService';
+import { getOrCreateLead, incrementMessageCount, shouldAnalyzeStage, analyzeAndUpdateStage, moveLeadToReceiptStage } from '@/app/lib/pipelineService';
+import { analyzeImageForReceipt, isConfirmedReceipt } from '@/app/lib/receiptDetectionService';
 
 // Cache settings to avoid database calls on every request
 let cachedSettings: any = null;
@@ -104,15 +105,32 @@ export async function POST(req: Request) {
 
                 console.log('Processing message from:', sender_psid, 'mid:', messageId);
 
-                if (webhook_event.message && webhook_event.message.text) {
-                    console.log('Message text:', webhook_event.message.text);
-                    // Use waitUntil to ensure Vercel keeps the function alive
-                    // until the message is fully processed and responded to
-                    waitUntil(
-                        handleMessage(sender_psid, webhook_event.message.text).catch(err => {
-                            console.error('Error handling message:', err);
-                        })
-                    );
+                if (webhook_event.message) {
+                    // Handle image attachments for receipt detection
+                    if (webhook_event.message.attachments) {
+                        for (const attachment of webhook_event.message.attachments) {
+                            if (attachment.type === 'image' && attachment.payload?.url) {
+                                console.log('Image attachment detected:', attachment.payload.url.substring(0, 100));
+                                waitUntil(
+                                    handleImageMessage(sender_psid, attachment.payload.url).catch(err => {
+                                        console.error('Error handling image message:', err);
+                                    })
+                                );
+                            }
+                        }
+                    }
+
+                    // Handle text messages
+                    if (webhook_event.message.text) {
+                        console.log('Message text:', webhook_event.message.text);
+                        // Use waitUntil to ensure Vercel keeps the function alive
+                        // until the message is fully processed and responded to
+                        waitUntil(
+                            handleMessage(sender_psid, webhook_event.message.text).catch(err => {
+                                console.error('Error handling message:', err);
+                            })
+                        );
+                    }
                 }
             }
             return new NextResponse('EVENT_RECEIVED', { status: 200 });
@@ -189,6 +207,51 @@ async function handleMessage(sender_psid: string, received_message: string) {
         await callSendAPI(sender_psid, response);
     } finally {
         // Turn off typing indicator
+        await sendTypingIndicator(sender_psid, false);
+    }
+}
+
+// Handle image messages for receipt detection
+async function handleImageMessage(sender_psid: string, imageUrl: string) {
+    console.log('handleImageMessage called, analyzing image for receipt...');
+
+    try {
+        // Get settings for page token
+        const settings = await getSettings();
+        const pageToken = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+
+        // Get or create the lead first
+        const lead = await getOrCreateLead(sender_psid, pageToken);
+        if (!lead) {
+            console.error('Could not get or create lead for sender:', sender_psid);
+            return;
+        }
+
+        // Send typing indicator while analyzing
+        await sendTypingIndicator(sender_psid, true);
+
+        // Analyze the image for receipt
+        const result = await analyzeImageForReceipt(imageUrl);
+        console.log('Receipt detection result:', result);
+
+        // If high-confidence receipt detected, move to receipt stage
+        if (isConfirmedReceipt(result)) {
+            console.log('Receipt confirmed! Moving lead to payment stage...');
+
+            await moveLeadToReceiptStage(lead.id, imageUrl, result.details || 'Receipt detected by AI');
+
+            // Send confirmation message to customer
+            await callSendAPI(sender_psid, {
+                text: "Salamat po! Natanggap na namin ang inyong proof of payment. I-process na namin ito at babalikan kayo shortly. 🙏"
+            });
+        } else {
+            console.log('Image is not a receipt (confidence:', result.confidence, ')');
+            // Optionally respond to non-receipt images
+            // For now, we'll let the bot handle it naturally if there's accompanying text
+        }
+    } catch (error) {
+        console.error('Error in handleImageMessage:', error);
+    } finally {
         await sendTypingIndicator(sender_psid, false);
     }
 }

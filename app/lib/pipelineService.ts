@@ -38,37 +38,89 @@ export async function getOrCreateLead(senderId: string, pageAccessToken?: string
             .eq('sender_id', senderId)
             .single();
 
-        // Helper function to fetch Facebook profile
+        // Helper function to fetch Facebook profile using multiple methods
         const fetchFacebookProfile = async (): Promise<{ name: string | null; profilePic: string | null }> => {
             if (!pageAccessToken) {
                 console.log('No page access token provided, skipping profile fetch');
                 return { name: null, profilePic: null };
             }
 
+            // Method 1: Try the standard Graph API (might work for some apps)
             try {
                 const url = `https://graph.facebook.com/v21.0/${senderId}?fields=first_name,last_name,name,profile_pic&access_token=${pageAccessToken}`;
-                console.log('Fetching Facebook profile:', senderId);
+                console.log('Trying standard Graph API profile fetch:', senderId);
 
                 const profileRes = await fetch(url);
-                const responseText = await profileRes.text();
-
-                if (!profileRes.ok) {
-                    console.error('Facebook profile API error:', profileRes.status, responseText);
-                    return { name: null, profilePic: null };
+                if (profileRes.ok) {
+                    const profile = await profileRes.json();
+                    const name = profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || null;
+                    if (name) {
+                        console.log('Got profile from standard Graph API:', name);
+                        return { name, profilePic: profile.profile_pic || null };
+                    }
                 }
-
-                const profile = JSON.parse(responseText);
-                console.log('Facebook profile response:', JSON.stringify(profile));
-
-                const name = profile.name || `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || null;
-                const profilePic = profile.profile_pic || null;
-
-                console.log('Fetched Facebook profile for lead:', name);
-                return { name, profilePic };
-            } catch (profileError) {
-                console.error('Error fetching Facebook profile:', profileError);
-                return { name: null, profilePic: null };
+            } catch (e) {
+                console.log('Standard Graph API failed, trying alternatives...');
             }
+
+            // Method 2: Try the Messenger Platform User Profile API
+            try {
+                const url = `https://graph.facebook.com/v21.0/me/personas?access_token=${pageAccessToken}`;
+                // This won't give us the user's name, but we can try conversations
+            } catch (e) {
+                // Continue to next method
+            }
+
+            // Method 3: Try to find conversation and get participant info
+            try {
+                // Get conversations where this user is a participant
+                const convUrl = `https://graph.facebook.com/v21.0/me/conversations?fields=participants,senders,updated_time&access_token=${pageAccessToken}`;
+                console.log('Trying conversations API...');
+
+                const convRes = await fetch(convUrl);
+                if (convRes.ok) {
+                    const convData = await convRes.json();
+
+                    // Find conversation with this sender
+                    for (const conv of convData.data || []) {
+                        const participants = conv.participants?.data || conv.senders?.data || [];
+                        for (const participant of participants) {
+                            if (participant.id === senderId && participant.name) {
+                                console.log('Got name from conversations API:', participant.name);
+                                return { name: participant.name, profilePic: null };
+                            }
+                        }
+                    }
+                } else {
+                    const errorData = await convRes.text();
+                    console.log('Conversations API response:', convRes.status, errorData);
+                }
+            } catch (e) {
+                console.log('Conversations API failed:', e);
+            }
+
+            // Method 4: Try direct conversation lookup
+            try {
+                const threadUrl = `https://graph.facebook.com/v21.0/t_${senderId}?fields=participants&access_token=${pageAccessToken}`;
+                console.log('Trying direct thread lookup...');
+
+                const threadRes = await fetch(threadUrl);
+                if (threadRes.ok) {
+                    const threadData = await threadRes.json();
+                    const participants = threadData.participants?.data || [];
+                    for (const participant of participants) {
+                        if (participant.id === senderId && participant.name) {
+                            console.log('Got name from thread lookup:', participant.name);
+                            return { name: participant.name, profilePic: null };
+                        }
+                    }
+                }
+            } catch (e) {
+                console.log('Thread lookup failed:', e);
+            }
+
+            console.log('All profile fetch methods failed for sender:', senderId);
+            return { name: null, profilePic: null };
         };
 
         if (existing) {
@@ -365,5 +417,97 @@ export async function getPipelineStages(): Promise<PipelineStage[]> {
     } catch (error) {
         console.error('Error in getPipelineStages:', error);
         return [];
+    }
+}
+
+// Move a lead to the "Payment Sent" stage when a receipt is detected
+export async function moveLeadToReceiptStage(leadId: string, receiptImageUrl: string, reason: string): Promise<boolean> {
+    try {
+        // Find or create the "Payment Sent" stage
+        let { data: paymentStage } = await supabase
+            .from('pipeline_stages')
+            .select('id')
+            .eq('name', 'Payment Sent')
+            .single();
+
+        // If "Payment Sent" stage doesn't exist, create it
+        if (!paymentStage) {
+            const { data: newStage, error: createError } = await supabase
+                .from('pipeline_stages')
+                .insert({
+                    name: 'Payment Sent',
+                    display_order: 3, // After "Qualified" typically
+                    color: '#22c55e', // Green color
+                    description: 'Customer sent proof of payment',
+                })
+                .select()
+                .single();
+
+            if (createError) {
+                console.error('Error creating Payment Sent stage:', createError);
+                return false;
+            }
+            paymentStage = newStage;
+        }
+
+        // Get current lead info
+        const { data: lead } = await supabase
+            .from('leads')
+            .select('current_stage_id')
+            .eq('id', leadId)
+            .single();
+
+        if (!lead) {
+            console.error('Lead not found:', leadId);
+            return false;
+        }
+
+        // Only update if not already in Payment Sent stage
+        if (lead.current_stage_id === paymentStage.id) {
+            console.log('Lead already in Payment Sent stage');
+            return true;
+        }
+
+        // Record stage change history
+        await supabase
+            .from('lead_stage_history')
+            .insert({
+                lead_id: leadId,
+                from_stage_id: lead.current_stage_id,
+                to_stage_id: paymentStage.id,
+                reason: reason,
+                changed_by: 'ai_receipt_detection',
+            });
+
+        // Update lead's current stage and receipt info
+        const { error: updateError } = await supabase
+            .from('leads')
+            .update({
+                current_stage_id: paymentStage.id,
+                receipt_image_url: receiptImageUrl,
+                receipt_detected_at: new Date().toISOString(),
+                ai_classification_reason: reason,
+            })
+            .eq('id', leadId);
+
+        if (updateError) {
+            console.error('Error updating lead stage:', updateError);
+            return false;
+        }
+
+        console.log(`Lead ${leadId} moved to Payment Sent stage`);
+
+        // Trigger workflows for this stage change
+        try {
+            const { triggerWorkflowsForStage } = await import('./workflowEngine');
+            await triggerWorkflowsForStage(paymentStage.id, leadId);
+        } catch (workflowError) {
+            console.error('Error triggering workflows:', workflowError);
+        }
+
+        return true;
+    } catch (error) {
+        console.error('Error in moveLeadToReceiptStage:', error);
+        return false;
     }
 }
