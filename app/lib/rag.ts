@@ -71,7 +71,7 @@ export async function searchDocuments(query: string, limit: number = 3) {
         // 2. Search Supabase via RPC
         const { data: documents, error } = await supabase.rpc('match_documents', {
             query_embedding: queryEmbedding,
-            match_threshold: 0.3, // Lowered threshold
+            match_threshold: 0.5, // Higher threshold for more relevant matches
             match_count: limit,
         });
 

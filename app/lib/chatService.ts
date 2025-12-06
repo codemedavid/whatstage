@@ -192,8 +192,20 @@ export async function getBotResponse(userMessage: string, senderId: string = 'we
         systemPrompt += `RULES TO FOLLOW:\n${rules.join('\n')}\n\n`;
     }
 
+    // Critical grounding section - ensure AI only uses knowledge base
+    systemPrompt += `CRITICAL KNOWLEDGE GROUNDING RULES:
+- You can ONLY answer questions using the KNOWLEDGE BASE provided below
+- If the answer is NOT in the knowledge base, politely say you don't have that specific information and offer to help with something else
+- NEVER make up information, prices, features, delivery times, or details not explicitly stated in the knowledge base
+- When uncertain, ask the customer for clarification instead of guessing
+- Do not use your general knowledge about products, services, or topics - only use what's in the knowledge base
+
+`;
+
     if (context) {
-        systemPrompt += `REFERENCE INFO (use naturally, don't quote verbatim):\n${context}\n\n`;
+        systemPrompt += `KNOWLEDGE BASE (YOUR ONLY SOURCE OF TRUTH):\n${context}\n\n`;
+    } else {
+        systemPrompt += `KNOWLEDGE BASE: No relevant information found for this query. Politely tell the customer you don't have specific information about their question right now, and ask if there's something else you can help with or suggest they contact support for more details.\n\n`;
     }
 
     // Build messages array with history

@@ -11,6 +11,10 @@ let cachedSettings: any = null;
 let settingsLastFetched = 0;
 const SETTINGS_CACHE_MS = 60000; // 1 minute cache
 
+// Cache for connected page tokens
+const pageTokenCache = new Map<string, { token: string; fetchedAt: number }>();
+const PAGE_TOKEN_CACHE_MS = 60000; // 1 minute cache
+
 // Fetch settings from database with caching
 async function getSettings() {
     const now = Date.now();
@@ -43,6 +47,38 @@ async function getSettings() {
             facebook_page_access_token: null,
         };
     }
+}
+
+// Get page access token - first tries connected_pages table, then falls back to bot_settings
+async function getPageToken(pageId?: string): Promise<string | null> {
+    // If we have a page ID, try to get page-specific token first
+    if (pageId) {
+        const now = Date.now();
+        const cached = pageTokenCache.get(pageId);
+        if (cached && now - cached.fetchedAt < PAGE_TOKEN_CACHE_MS) {
+            return cached.token;
+        }
+
+        try {
+            const { data, error } = await supabase
+                .from('connected_pages')
+                .select('page_access_token')
+                .eq('page_id', pageId)
+                .eq('is_active', true)
+                .single();
+
+            if (!error && data?.page_access_token) {
+                pageTokenCache.set(pageId, { token: data.page_access_token, fetchedAt: now });
+                return data.page_access_token;
+            }
+        } catch (error) {
+            console.error('Error fetching page token:', error);
+        }
+    }
+
+    // Fallback to bot_settings or environment variable
+    const settings = await getSettings();
+    return settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN || null;
 }
 
 export async function GET(req: Request) {
@@ -131,7 +167,7 @@ export async function POST(req: Request) {
                             if (attachment.type === 'image' && attachment.payload?.url) {
                                 console.log('Image attachment detected:', attachment.payload.url.substring(0, 100));
                                 waitUntil(
-                                    handleImageMessage(sender_psid, attachment.payload.url).catch(err => {
+                                    handleImageMessage(sender_psid, attachment.payload.url, recipient_psid).catch(err => {
                                         console.error('Error handling image message:', err);
                                     })
                                 );
@@ -145,7 +181,7 @@ export async function POST(req: Request) {
                         // Use waitUntil to ensure Vercel keeps the function alive
                         // until the message is fully processed and responded to
                         waitUntil(
-                            handleMessage(sender_psid, webhook_event.message.text).catch(err => {
+                            handleMessage(sender_psid, webhook_event.message.text, recipient_psid).catch(err => {
                                 console.error('Error handling message:', err);
                             })
                         );
@@ -165,9 +201,8 @@ export async function POST(req: Request) {
 
 
 // Send typing indicator to show bot is working
-async function sendTypingIndicator(sender_psid: string, on: boolean) {
-    const settings = await getSettings();
-    const PAGE_ACCESS_TOKEN = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+async function sendTypingIndicator(sender_psid: string, on: boolean, pageId?: string) {
+    const PAGE_ACCESS_TOKEN = await getPageToken(pageId);
 
     if (!PAGE_ACCESS_TOKEN) return;
 
@@ -185,7 +220,7 @@ async function sendTypingIndicator(sender_psid: string, on: boolean) {
     }
 }
 
-async function handleMessage(sender_psid: string, received_message: string) {
+async function handleMessage(sender_psid: string, received_message: string, pageId?: string) {
     console.log('handleMessage called, generating response...');
 
     // Check if human takeover is active for this conversation
@@ -196,17 +231,15 @@ async function handleMessage(sender_psid: string, received_message: string) {
     }
 
     // Send typing indicator immediately
-    await sendTypingIndicator(sender_psid, true);
+    await sendTypingIndicator(sender_psid, true, pageId);
 
     // Process message and send response
     try {
-        // === AUTO-PIPELINE INTEGRATION ===
-        // Get page access token for profile fetching
-        const settings = await getSettings();
-        const pageToken = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+        // Get page access token for profile fetching (using per-page token)
+        const pageToken = await getPageToken(pageId);
 
         // Track the lead and check if stage analysis is needed
-        const lead = await getOrCreateLead(sender_psid, pageToken);
+        const lead = await getOrCreateLead(sender_psid, pageToken || undefined);
         if (lead) {
             const messageCount = await incrementMessageCount(lead.id);
             console.log(`Lead ${lead.id} message count: ${messageCount}`);
@@ -230,31 +263,30 @@ async function handleMessage(sender_psid: string, received_message: string) {
             text: responseText,
         };
 
-        await callSendAPI(sender_psid, response);
+        await callSendAPI(sender_psid, response, pageId);
     } finally {
         // Turn off typing indicator
-        await sendTypingIndicator(sender_psid, false);
+        await sendTypingIndicator(sender_psid, false, pageId);
     }
 }
 
 // Handle image messages for receipt detection
-async function handleImageMessage(sender_psid: string, imageUrl: string) {
+async function handleImageMessage(sender_psid: string, imageUrl: string, pageId?: string) {
     console.log('handleImageMessage called, analyzing image for receipt...');
 
     try {
-        // Get settings for page token
-        const settings = await getSettings();
-        const pageToken = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+        // Get page token for this specific page
+        const pageToken = await getPageToken(pageId);
 
         // Get or create the lead first
-        const lead = await getOrCreateLead(sender_psid, pageToken);
+        const lead = await getOrCreateLead(sender_psid, pageToken || undefined);
         if (!lead) {
             console.error('Could not get or create lead for sender:', sender_psid);
             return;
         }
 
         // Send typing indicator while analyzing
-        await sendTypingIndicator(sender_psid, true);
+        await sendTypingIndicator(sender_psid, true, pageId);
 
         // Analyze the image for receipt
         const result = await analyzeImageForReceipt(imageUrl);
@@ -269,7 +301,7 @@ async function handleImageMessage(sender_psid: string, imageUrl: string) {
             // Send confirmation message to customer
             await callSendAPI(sender_psid, {
                 text: "Salamat po! Natanggap na namin ang inyong proof of payment. I-process na namin ito at babalikan kayo shortly. 🙏"
-            });
+            }, pageId);
         } else {
             console.log('Image is not a receipt (confidence:', result.confidence, ')');
             // Optionally respond to non-receipt images
@@ -278,16 +310,15 @@ async function handleImageMessage(sender_psid: string, imageUrl: string) {
     } catch (error) {
         console.error('Error in handleImageMessage:', error);
     } finally {
-        await sendTypingIndicator(sender_psid, false);
+        await sendTypingIndicator(sender_psid, false, pageId);
     }
 }
 
 
 
 
-async function callSendAPI(sender_psid: string, response: any) {
-    const settings = await getSettings();
-    const PAGE_ACCESS_TOKEN = settings.facebook_page_access_token || process.env.FACEBOOK_PAGE_ACCESS_TOKEN;
+async function callSendAPI(sender_psid: string, response: any, pageId?: string) {
+    const PAGE_ACCESS_TOKEN = await getPageToken(pageId);
 
     console.log('callSendAPI called, token present:', !!PAGE_ACCESS_TOKEN);
 
