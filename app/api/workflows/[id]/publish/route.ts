@@ -28,7 +28,7 @@ export async function POST(
             const { data: leads, error: leadsError } = await supabase
                 .from('leads')
                 .select('id, sender_id')
-                .eq('stage_id', data.trigger_stage_id);
+                .eq('current_stage_id', data.trigger_stage_id);
 
             if (leadsError) {
                 console.error('Error fetching leads for apply_to_existing:', leadsError);
