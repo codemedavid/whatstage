@@ -16,7 +16,7 @@ import {
     ReactFlowProvider
 } from '@xyflow/react';
 import '@xyflow/react/dist/style.css';
-import { useCallback, useState, useEffect } from 'react';
+import { useCallback, useState, useEffect, useRef } from 'react';
 import CustomNode from './CustomNode';
 import PropertiesPanel from './PropertiesPanel';
 import { Plus } from 'lucide-react';
@@ -56,16 +56,30 @@ function WorkflowCanvasContent({ onSave, isSaving, initialData }: WorkflowCanvas
         }
     }, [initialData, setNodes, setEdges]);
 
-    // Auto-save with debounce
+    // Track if this is first render to avoid initial change trigger
+    const isInitialMount = useRef(true);
+    const lastSavedDataRef = useRef<string>('');
+
+    // Notify parent when data changes (not auto-save, just notification)
     useEffect(() => {
-        if (!onSave) return;
+        // Skip initial mount
+        if (isInitialMount.current) {
+            isInitialMount.current = false;
+            lastSavedDataRef.current = JSON.stringify({ nodes, edges });
+            return;
+        }
 
-        const timer = setTimeout(() => {
+        // Only notify if data actually changed
+        const currentData = JSON.stringify({ nodes, edges });
+        if (currentData !== lastSavedDataRef.current && onSave) {
             onSave({ nodes, edges });
-        }, 2000);
-
-        return () => clearTimeout(timer);
+        }
     }, [nodes, edges, onSave]);
+
+    // Method to mark data as saved (called externally via ref if needed)
+    const markAsSaved = useCallback(() => {
+        lastSavedDataRef.current = JSON.stringify({ nodes, edges });
+    }, [nodes, edges]);
 
     const onConnect = useCallback(
         (params: Connection) => setEdges((eds) => addEdge({ ...params, animated: true, style: { stroke: '#94a3b8', strokeWidth: 2 } }, eds)),
