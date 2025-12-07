@@ -30,6 +30,11 @@ function AutomationPageContent() {
     // Track current workflow data from canvas
     const currentWorkflowDataRef = useRef<any>(null);
 
+    // Publish confirmation modal state
+    const [showPublishConfirmModal, setShowPublishConfirmModal] = useState(false);
+    const [existingLeadsCount, setExistingLeadsCount] = useState(0);
+    const [isPublishing, setIsPublishing] = useState(false);
+
     useEffect(() => {
         // Fetch leads for test dropdown
         fetch('/api/pipeline/leads')
@@ -130,15 +135,57 @@ function AutomationPageContent() {
             return;
         }
 
+        // Check if we're unpublishing
+        if (isPublished) {
+            // Just unpublish without confirmation
+            await doPublish(false, false);
+            return;
+        }
+
+        // Check if trigger node has applyToExisting enabled
+        const triggerNode = currentWorkflowDataRef.current?.nodes?.find((n: any) => n.data.type === 'trigger');
+        const applyToExisting = triggerNode?.data?.applyToExisting || false;
+        const triggerStageId = triggerNode?.data?.triggerStageId;
+
+        if (applyToExisting && triggerStageId) {
+            // Fetch count of existing leads in the trigger stage
+            try {
+                const res = await fetch('/api/pipeline/leads');
+                const data = await res.json();
+                // Find the stage and count its leads
+                const stage = data.stages?.find((s: any) => s.id === triggerStageId);
+                const count = stage?.leads?.length || 0;
+                setExistingLeadsCount(count);
+                setShowPublishConfirmModal(true);
+            } catch (error) {
+                console.error('Error fetching leads count:', error);
+                // Proceed without showing count
+                setExistingLeadsCount(0);
+                setShowPublishConfirmModal(true);
+            }
+        } else {
+            // No apply_to_existing, just publish normally
+            await doPublish(true, false);
+        }
+    };
+
+    const doPublish = async (publish: boolean, applyToExisting: boolean) => {
+        setIsPublishing(true);
         try {
             await fetch(`/api/workflows/${workflowId}/publish`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ is_published: !isPublished }),
+                body: JSON.stringify({
+                    is_published: publish,
+                    apply_to_existing: applyToExisting
+                }),
             });
-            setIsPublished(!isPublished);
+            setIsPublished(publish);
+            setShowPublishConfirmModal(false);
         } catch (error) {
             console.error('Error publishing workflow:', error);
+        } finally {
+            setIsPublishing(false);
         }
     };
 
@@ -438,6 +485,56 @@ function AutomationPageContent() {
                                         Generate Workflow
                                     </>
                                 )}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Publish Confirmation Modal */}
+            {showPublishConfirmModal && (
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+                    <div className="bg-white rounded-xl p-6 w-full max-w-md shadow-2xl">
+                        <div className="flex items-center gap-3 mb-4">
+                            <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center">
+                                <Play size={20} className="text-amber-600" />
+                            </div>
+                            <div>
+                                <h2 className="text-lg font-bold text-gray-900">Confirm Publish</h2>
+                                <p className="text-sm text-gray-500">Apply to existing leads is enabled</p>
+                            </div>
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                            <p className="text-sm text-amber-800">
+                                <strong>Warning:</strong> This workflow will immediately run for{' '}
+                                <span className="font-bold">{existingLeadsCount}</span>{' '}
+                                existing lead{existingLeadsCount !== 1 ? 's' : ''} currently in the trigger stage.
+                            </p>
+                            <p className="text-xs text-amber-600 mt-2">
+                                Messages may be sent to these leads right away.
+                            </p>
+                        </div>
+
+                        <div className="flex gap-3 justify-end">
+                            <button
+                                onClick={() => setShowPublishConfirmModal(false)}
+                                className="px-4 py-2 text-gray-600 hover:text-gray-800 font-medium text-sm"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                onClick={() => doPublish(true, false)}
+                                className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg font-medium text-sm"
+                            >
+                                Publish (Incoming Only)
+                            </button>
+                            <button
+                                onClick={() => doPublish(true, true)}
+                                disabled={isPublishing}
+                                className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium text-sm disabled:opacity-50"
+                            >
+                                {isPublishing ? 'Publishing...' : 'Publish & Apply Now'}
                             </button>
                         </div>
                     </div>

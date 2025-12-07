@@ -23,6 +23,7 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
     const [stopBotReason, setStopBotReason] = useState('');
     const [conditionType, setConditionType] = useState('has_replied');
     const [conditionRule, setConditionRule] = useState('');
+    const [applyToExisting, setApplyToExisting] = useState(false);
 
     useEffect(() => {
         // Fetch pipeline stages
@@ -50,6 +51,7 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
             setMessageMode(selectedNode.data.messageMode as string || 'custom');
             setMessageText(selectedNode.data.messageText as string || '');
             setTriggerStageId(selectedNode.data.triggerStageId as string || '');
+            setApplyToExisting(selectedNode.data.applyToExisting as boolean || false);
             setWaitDuration(selectedNode.data.duration as string || '5');
             setWaitUnit(selectedNode.data.unit as string || 'minutes');
             setStopBotReason(selectedNode.data.reason as string || '');
@@ -68,6 +70,7 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
             messageMode,
             messageText,
             triggerStageId,
+            applyToExisting,
             duration: waitDuration,
             unit: waitUnit,
             reason: stopBotReason,
@@ -152,23 +155,45 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                 )}
 
                 {selectedNode.data.type === 'trigger' && (
-                    <div>
-                        <label className="block text-xs font-medium text-gray-500 mb-1">Pipeline Stage Trigger</label>
-                        <select
-                            value={triggerStageId}
-                            onChange={(e) => setTriggerStageId(e.target.value)}
-                            className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
-                        >
-                            <option value="">Select a stage...</option>
-                            {Array.isArray(stages) && stages.map((stage) => (
-                                <option key={stage.id} value={stage.id}>
-                                    {stage.name}
-                                </option>
-                            ))}
-                        </select>
-                        <p className="text-xs text-gray-400 mt-1">
-                            Workflow triggers when a lead enters this stage
-                        </p>
+                    <div className="space-y-4">
+                        <div>
+                            <label className="block text-xs font-medium text-gray-500 mb-1">Pipeline Stage Trigger</label>
+                            <select
+                                value={triggerStageId}
+                                onChange={(e) => setTriggerStageId(e.target.value)}
+                                className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
+                            >
+                                <option value="">Select a stage...</option>
+                                {Array.isArray(stages) && stages.map((stage) => (
+                                    <option key={stage.id} value={stage.id}>
+                                        {stage.name}
+                                    </option>
+                                ))}
+                            </select>
+                            <p className="text-xs text-gray-400 mt-1">
+                                Workflow triggers when a lead enters this stage
+                            </p>
+                        </div>
+
+                        <div className="bg-amber-50 border border-amber-200 rounded-lg p-3">
+                            <div className="flex items-center justify-between">
+                                <div className="flex-1">
+                                    <label className="block text-xs font-medium text-amber-800">Apply to existing leads</label>
+                                    <p className="text-xs text-amber-600 mt-0.5">
+                                        When published, also run for leads already in this stage
+                                    </p>
+                                </div>
+                                <button
+                                    type="button"
+                                    onClick={() => setApplyToExisting(!applyToExisting)}
+                                    className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${applyToExisting ? 'bg-amber-500' : 'bg-gray-200'}`}
+                                >
+                                    <span
+                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${applyToExisting ? 'translate-x-4' : 'translate-x-0'}`}
+                                    />
+                                </button>
+                            </div>
+                        </div>
                     </div>
                 )}
 
