@@ -1,6 +1,6 @@
 'use client';
 
-import { X, Save, Trash2 } from 'lucide-react';
+import { X, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Node } from '@xyflow/react';
 
@@ -12,18 +12,7 @@ interface PropertiesPanelProps {
 }
 
 export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDelete }: PropertiesPanelProps) {
-    const [label, setLabel] = useState('');
-    const [description, setDescription] = useState('');
-    const [messageMode, setMessageMode] = useState('custom');
-    const [messageText, setMessageText] = useState('');
-    const [triggerStageId, setTriggerStageId] = useState('');
     const [stages, setStages] = useState<Array<{ id: string; name: string }>>([]);
-    const [waitDuration, setWaitDuration] = useState('5');
-    const [waitUnit, setWaitUnit] = useState('minutes');
-    const [stopBotReason, setStopBotReason] = useState('');
-    const [conditionType, setConditionType] = useState('has_replied');
-    const [conditionRule, setConditionRule] = useState('');
-    const [applyToExisting, setApplyToExisting] = useState(false);
 
     useEffect(() => {
         // Fetch pipeline stages
@@ -44,52 +33,42 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
             });
     }, []);
 
-    useEffect(() => {
-        if (selectedNode) {
-            setLabel(selectedNode.data.label as string || '');
-            setDescription(selectedNode.data.description as string || '');
-            setMessageMode(selectedNode.data.messageMode as string || 'custom');
-            setMessageText(selectedNode.data.messageText as string || '');
-            setTriggerStageId(selectedNode.data.triggerStageId as string || '');
-            setApplyToExisting(selectedNode.data.applyToExisting as boolean || false);
-            setWaitDuration(selectedNode.data.duration as string || '5');
-            setWaitUnit(selectedNode.data.unit as string || 'minutes');
-            setStopBotReason(selectedNode.data.reason as string || '');
-            setConditionType(selectedNode.data.conditionType as string || 'has_replied');
-            setConditionRule(selectedNode.data.conditionRule as string || '');
-        }
-    }, [selectedNode]);
-
     if (!selectedNode) return null;
 
-    const handleSave = () => {
-        const updatedData = {
+    // Helper to update a specific field immediately
+    const updateField = (field: string, value: any) => {
+        if (!selectedNode) return;
+
+        onUpdate(selectedNode.id, {
             ...selectedNode.data,
-            label,
-            description,
-            messageMode,
-            messageText,
-            triggerStageId,
-            applyToExisting,
-            duration: waitDuration,
-            unit: waitUnit,
-            reason: stopBotReason,
-            conditionType,
-            conditionRule,
-        };
-        onUpdate(selectedNode.id, updatedData);
+            [field]: value
+        });
+    };
+
+    // Helper to get value with safe default
+    const getValue = (field: string, defaultValue: any = '') => {
+        return (selectedNode.data[field] as any) ?? defaultValue;
     };
 
     return (
-        <div className="absolute top-4 right-4 w-80 bg-white shadow-xl rounded-xl border border-gray-100 flex flex-col overflow-hidden z-10 animate-in slide-in-from-right-10 duration-200">
-            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50">
+        <div className="absolute top-4 right-4 w-80 bg-white shadow-xl rounded-xl border border-gray-100 flex flex-col overflow-hidden z-10 animate-in slide-in-from-right-10 duration-200" style={{ maxHeight: 'calc(100vh - 2rem)' }}>
+            <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50 shrink-0">
                 <h3 className="font-semibold text-gray-800">Properties</h3>
-                <button onClick={onClose} className="text-gray-400 hover:text-gray-600">
-                    <X size={18} />
-                </button>
+                <div className="flex items-center gap-1">
+                    <button
+                        onClick={() => onDelete(selectedNode.id)}
+                        className="p-1.5 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                        title="Delete Node"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                    <button onClick={onClose} className="p-1.5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 rounded-lg transition-colors">
+                        <X size={18} />
+                    </button>
+                </div>
             </div>
 
-            <div className="p-4 space-y-4">
+            <div className="p-4 space-y-4 overflow-y-auto">
                 <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Type</label>
                     <div className="px-3 py-2 bg-gray-50 rounded-lg text-sm font-medium capitalize text-gray-700">
@@ -101,8 +80,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                     <label className="block text-xs font-medium text-gray-500 mb-1">Label</label>
                     <input
                         type="text"
-                        value={label}
-                        onChange={(e) => setLabel(e.target.value)}
+                        value={getValue('label')}
+                        onChange={(e) => updateField('label', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                     />
                 </div>
@@ -110,8 +89,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                 <div>
                     <label className="block text-xs font-medium text-gray-500 mb-1">Description</label>
                     <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
+                        value={getValue('description')}
+                        onChange={(e) => updateField('description', e.target.value)}
                         rows={2}
                         className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
                     />
@@ -126,8 +105,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Message Mode</label>
                             <select
-                                value={messageMode}
-                                onChange={(e) => setMessageMode(e.target.value)}
+                                value={getValue('messageMode', 'custom')}
+                                onChange={(e) => updateField('messageMode', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
                             >
                                 <option value="custom">Custom Message</option>
@@ -136,17 +115,17 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         </div>
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">
-                                {messageMode === 'ai' ? 'Message Prompt' : 'Message Text'}
+                                {getValue('messageMode') === 'ai' ? 'Message Prompt' : 'Message Text'}
                             </label>
                             <textarea
-                                value={messageText}
-                                onChange={(e) => setMessageText(e.target.value)}
+                                value={getValue('messageText')}
+                                onChange={(e) => updateField('messageText', e.target.value)}
                                 rows={4}
-                                placeholder={messageMode === 'ai' ? 'Describe what the message should say...' : 'Type your message here...'}
+                                placeholder={getValue('messageMode') === 'ai' ? 'Describe what the message should say...' : 'Type your message here...'}
                                 className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
                             />
                             <p className="text-xs text-gray-400 mt-1">
-                                {messageMode === 'ai'
+                                {getValue('messageMode') === 'ai'
                                     ? 'AI will generate a personalized message based on conversation context'
                                     : 'This exact message will be sent to the customer'}
                             </p>
@@ -159,8 +138,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Pipeline Stage Trigger</label>
                             <select
-                                value={triggerStageId}
-                                onChange={(e) => setTriggerStageId(e.target.value)}
+                                value={getValue('triggerStageId')}
+                                onChange={(e) => updateField('triggerStageId', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
                             >
                                 <option value="">Select a stage...</option>
@@ -185,11 +164,11 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                                 </div>
                                 <button
                                     type="button"
-                                    onClick={() => setApplyToExisting(!applyToExisting)}
-                                    className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${applyToExisting ? 'bg-amber-500' : 'bg-gray-200'}`}
+                                    onClick={() => updateField('applyToExisting', !getValue('applyToExisting', false))}
+                                    className={`relative inline-flex h-5 w-9 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-amber-500 focus:ring-offset-2 ${getValue('applyToExisting', false) ? 'bg-amber-500' : 'bg-gray-200'}`}
                                 >
                                     <span
-                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${applyToExisting ? 'translate-x-4' : 'translate-x-0'}`}
+                                        className={`pointer-events-none inline-block h-4 w-4 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${getValue('applyToExisting', false) ? 'translate-x-4' : 'translate-x-0'}`}
                                     />
                                 </button>
                             </div>
@@ -203,8 +182,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                             <label className="block text-xs font-medium text-gray-500 mb-1">Duration</label>
                             <input
                                 type="number"
-                                value={waitDuration}
-                                onChange={(e) => setWaitDuration(e.target.value)}
+                                value={getValue('duration', '5')}
+                                onChange={(e) => updateField('duration', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                                 placeholder="5"
                                 min="1"
@@ -213,8 +192,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         <div className="flex-1">
                             <label className="block text-xs font-medium text-gray-500 mb-1">Unit</label>
                             <select
-                                value={waitUnit}
-                                onChange={(e) => setWaitUnit(e.target.value)}
+                                value={getValue('unit', 'minutes')}
+                                onChange={(e) => updateField('unit', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
                             >
                                 <option value="minutes">Minutes</option>
@@ -230,8 +209,8 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         <label className="block text-xs font-medium text-gray-500 mb-1">Reason (Optional)</label>
                         <input
                             type="text"
-                            value={stopBotReason}
-                            onChange={(e) => setStopBotReason(e.target.value)}
+                            value={getValue('reason')}
+                            onChange={(e) => updateField('reason', e.target.value)}
                             placeholder="e.g. User opted out"
                             className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500"
                         />
@@ -243,20 +222,20 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         <div>
                             <label className="block text-xs font-medium text-gray-500 mb-1">Condition Type</label>
                             <select
-                                value={conditionType}
-                                onChange={(e) => setConditionType(e.target.value)}
+                                value={getValue('conditionType', 'has_replied')}
+                                onChange={(e) => updateField('conditionType', e.target.value)}
                                 className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 bg-white"
                             >
                                 <option value="has_replied">User Has Replied?</option>
                                 <option value="ai_rule">Custom AI Rule</option>
                             </select>
                         </div>
-                        {conditionType === 'ai_rule' && (
+                        {getValue('conditionType') === 'ai_rule' && (
                             <div>
                                 <label className="block text-xs font-medium text-gray-500 mb-1">Rule Detail</label>
                                 <textarea
-                                    value={conditionRule}
-                                    onChange={(e) => setConditionRule(e.target.value)}
+                                    value={getValue('conditionRule')}
+                                    onChange={(e) => updateField('conditionRule', e.target.value)}
                                     rows={2}
                                     placeholder="e.g. Check if user is interested"
                                     className="w-full px-3 py-2 border border-gray-200 text-black rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 resize-none"
@@ -265,22 +244,6 @@ export default function PropertiesPanel({ selectedNode, onClose, onUpdate, onDel
                         )}
                     </div>
                 )}
-            </div>
-
-            <div className="p-4 bg-gray-50 border-t border-gray-100 flex gap-2">
-                <button
-                    onClick={handleSave}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
-                >
-                    <Save size={16} />
-                    Save Changes
-                </button>
-                <button
-                    onClick={() => onDelete(selectedNode.id)}
-                    className="px-3 py-2 bg-white border border-red-200 text-red-600 rounded-lg hover:bg-red-50 transition-colors"
-                >
-                    <Trash2 size={16} />
-                </button>
             </div>
         </div>
     );

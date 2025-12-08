@@ -5,6 +5,7 @@ import { supabase } from '@/app/lib/supabase';
 import { getOrCreateLead, incrementMessageCount, shouldAnalyzeStage, analyzeAndUpdateStage, moveLeadToReceiptStage } from '@/app/lib/pipelineService';
 import { analyzeImageForReceipt, isConfirmedReceipt } from '@/app/lib/receiptDetectionService';
 import { isTakeoverActive, startOrRefreshTakeover } from '@/app/lib/humanTakeoverService';
+import { extractAndStoreContactInfo } from '@/app/lib/contactExtractionService';
 
 // Cache settings to avoid database calls on every request
 let cachedSettings: any = null;
@@ -411,6 +412,12 @@ async function handleMessage(sender_psid: string, received_message: string, page
             const messageCount = await incrementMessageCount(lead.id);
             console.log(`Lead ${lead.id} message count: ${messageCount}`);
 
+            // Extract and store contact info (phone/email) from the message
+            // Fire and forget - don't await
+            extractAndStoreContactInfo(lead.id, received_message).catch((err: unknown) => {
+                console.error('Error extracting contact info:', err);
+            });
+
             // Check if we should analyze stage (runs in background, non-blocking)
             if (shouldAnalyzeStage({ ...lead, message_count: messageCount }, received_message)) {
                 console.log('Triggering pipeline stage analysis...');
@@ -558,6 +565,13 @@ async function handleImageMessage(sender_psid: string, imageUrl: string, pageId?
 
         // Increment message count for the lead
         await incrementMessageCount(lead.id);
+
+        // Extract contact info from accompanying text if present
+        if (accompanyingText) {
+            extractAndStoreContactInfo(lead.id, accompanyingText).catch((err: unknown) => {
+                console.error('Error extracting contact info from image message:', err);
+            });
+        }
 
         // Build a user message that includes any accompanying text
         const userMessage = accompanyingText

@@ -290,6 +290,8 @@ CREATE TABLE IF NOT EXISTS leads (
   sender_id TEXT NOT NULL UNIQUE,
   name TEXT,
   profile_pic TEXT,
+  phone TEXT,
+  email TEXT,
   current_stage_id UUID REFERENCES pipeline_stages(id),
   message_count INT DEFAULT 0,
   last_message_at TIMESTAMPTZ,
@@ -308,6 +310,8 @@ CREATE INDEX IF NOT EXISTS idx_leads_sender_id ON leads(sender_id);
 CREATE INDEX IF NOT EXISTS idx_leads_current_stage ON leads(current_stage_id);
 CREATE INDEX IF NOT EXISTS idx_leads_receipt_detected ON leads(receipt_detected_at) 
   WHERE receipt_detected_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_phone ON leads(phone) WHERE phone IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_leads_email ON leads(email) WHERE email IS NOT NULL;
 
 -- Enable RLS
 ALTER TABLE leads ENABLE ROW LEVEL SECURITY;
