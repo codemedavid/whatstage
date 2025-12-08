@@ -81,9 +81,9 @@ export default function LoginPage() {
             {/* Header */}
             <header className="px-6 py-6 md:px-12 flex justify-between items-center z-10">
                 <div className="flex flex-col">
-                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">Razor</h1>
+                    <h1 className="text-2xl font-bold tracking-tight text-gray-900">WhatStage?</h1>
                     <div className="text-xs text-gray-500 mt-1 flex items-center gap-1">
-                        Sales@Razor.uk <span className="text-gray-400">→</span>
+                        Sales@WhatStage.com <span className="text-gray-400">→</span>
                     </div>
                 </div>
 
