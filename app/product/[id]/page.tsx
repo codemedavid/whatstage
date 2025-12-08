@@ -94,8 +94,34 @@ export default function ProductDetailPage() {
                     // Fetch variations
                     const variationsRes = await fetch(`/api/product-variations?productId=${foundProduct.id}`);
                     const variationsData = await variationsRes.json();
-                    if (Array.isArray(variationsData)) {
+                    if (Array.isArray(variationsData) && variationsData.length > 0) {
                         setVariations(variationsData);
+
+                        // Set default selections (first option of each type)
+                        const defaults: Record<string, string> = {};
+                        let defaultPrice = foundProduct.price;
+
+                        // Group first to find unique types
+                        const types = new Set(variationsData.map((v: any) => v.variation_type.name));
+
+                        types.forEach(typeName => {
+                            // Find the first variation for this type
+                            const firstVar = variationsData.find((v: any) => v.variation_type.name === typeName);
+                            if (firstVar) {
+                                defaults[typeName] = firstVar.value;
+                                // Update price to the first variation's price
+                                // Logic: If multiple types exist, this simple logic takes the price of the last processed type's first option
+                                // For better logic with multiple types, we might need a combined price strategy or just pick one
+                                if (firstVar.price > 0) {
+                                    defaultPrice = firstVar.price;
+                                }
+                            }
+                        });
+
+                        setSelectedVariations(defaults);
+                        if (defaultPrice) setCurrentPrice(defaultPrice);
+                    } else if (Array.isArray(variationsData)) {
+                        setVariations([]);
                     }
 
                     // Fetch related products
