@@ -48,6 +48,7 @@ export async function sendProductCards(sender_psid: string, products: Product[],
     });
 
     const requestBody = {
+        messaging_type: 'RESPONSE',
         recipient: { id: sender_psid },
         message: {
             attachment: {
@@ -137,6 +138,7 @@ export async function sendPropertyCards(sender_psid: string, properties: Propert
     });
 
     const requestBody = {
+        messaging_type: 'RESPONSE',
         recipient: { id: sender_psid },
         message: {
             attachment: {
@@ -222,6 +224,7 @@ export async function sendPaymentMethodCards(sender_psid: string, methods: Payme
     });
 
     const requestBody = {
+        messaging_type: 'RESPONSE',
         recipient: { id: sender_psid },
         message: {
             attachment: {
@@ -292,6 +295,7 @@ export async function callSendAPI(sender_psid: string, response: any, pageId?: s
     }
 
     const requestBody = {
+        messaging_type: 'RESPONSE',
         recipient: {
             id: sender_psid,
         },
