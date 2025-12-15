@@ -173,6 +173,20 @@ export async function getOrCreateLead(senderId: string, pageAccessToken?: string
             return null;
         }
 
+        // Trigger workflows for new lead entering the default stage
+        if (newLead && defaultStage?.id) {
+            try {
+                console.log(`🚀 New lead ${newLead.id} created, triggering workflows for default stage`);
+                const { triggerWorkflowsForStage } = await import('./workflowEngine');
+                // Fire and forget - don't block lead creation
+                triggerWorkflowsForStage(defaultStage.id, newLead.id).catch(err => {
+                    console.error('Error triggering workflows for new lead:', err);
+                });
+            } catch (workflowError) {
+                console.error('Error importing workflow engine:', workflowError);
+            }
+        }
+
         return newLead as Lead;
     } catch (error) {
         console.error('Error in getOrCreateLead:', error);
