@@ -1,4 +1,5 @@
 import { supabase } from './supabase';
+import { deactivateSmartPassive } from './smartPassiveService';
 
 // Cache settings to avoid database calls on every request
 let cachedTimeout: number | null = null;
@@ -69,6 +70,9 @@ export async function startOrRefreshTakeover(leadSenderId: string): Promise<void
             console.error('Error starting/refreshing takeover:', error);
         } else {
             console.log(`Human takeover started/refreshed for ${leadSenderId}, timeout: ${timeoutMinutes} minutes`);
+
+            // Also deactivate Smart Passive mode since human is now handling this
+            await deactivateSmartPassive(leadSenderId);
         }
     } catch (error) {
         console.error('Error in startOrRefreshTakeover:', error);

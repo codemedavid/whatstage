@@ -4,6 +4,7 @@ import { isTakeoverActive } from '@/app/lib/humanTakeoverService';
 import { analyzeImageForReceipt, isConfirmedReceipt } from '@/app/lib/receiptDetectionService';
 import { analyzeAndUpdateStage, getOrCreateLead, incrementMessageCount, moveLeadToReceiptStage, shouldAnalyzeStage } from '@/app/lib/pipelineService';
 import { supabase } from '@/app/lib/supabase';
+import { detectNeedsHumanAttention, activateSmartPassive, trackQuestion, isSmartPassiveActive, deactivateSmartPassive } from '@/app/lib/smartPassiveService';
 
 import { trackActivity } from '@/app/lib/activityTrackingService';
 import { callSendAPI, sendAppointmentCard, sendPaymentMethodCards, sendProductCards, sendPropertyCards, sendTypingIndicator } from './facebookClient';
@@ -455,6 +456,19 @@ export async function handleMessage(sender_psid: string, received_message: strin
                 });
             }
         }
+
+        // --- SMART PASSIVE DETECTION ---
+        // Check if we should activate Smart Passive mode before responding
+        const detection = await detectNeedsHumanAttention(received_message, sender_psid);
+        if (detection.shouldActivate) {
+            console.log(`[SmartPassive] Triggered - ${detection.reason}`);
+            await activateSmartPassive(sender_psid, detection.reason || 'Customer needs assistance');
+        }
+
+        // Track question for repetition detection
+        trackQuestion(sender_psid, received_message).catch(err => {
+            console.error('[SmartPassive] Error tracking question:', err);
+        });
 
         // Get Bot Response
         const rawResponseText = await getBotResponse(received_message, sender_psid);

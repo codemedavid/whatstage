@@ -6,6 +6,7 @@ import { getCatalogContext } from './productRagService';
 import { getCurrentCart, buildCartContextForAI } from './cartContextService';
 import { getLeadEntities, buildEntityContextForAI, extractEntitiesFromMessage, LeadEntity } from './entityTrackingService';
 import { calculateImportance } from './importanceService';
+import { getSmartPassiveState, buildSmartPassiveContext, SmartPassiveState } from './smartPassiveService';
 
 const MAX_HISTORY = 10; // Reduced to prevent context overload
 
@@ -398,15 +399,17 @@ export async function getBotResponse(
         getLatestConversationSummary(senderId), // Get long-term context summary
         getCurrentCart(senderId), // Get current cart status
         getLeadEntities(senderId), // Get structured customer facts
+        getSmartPassiveState(senderId), // Get Smart Passive mode state
     ]);
 
-    // Deference the promise results correctly (added summary, cart, and entities)
+    // Deference the promise results correctly (added summary, cart, entities, and smartPassiveState)
     const [rules, history, context, instructions, activities, catalogContext] = results.slice(0, 6) as [string[], { role: string; content: string }[], string, string, LeadActivity[], string];
     const summary = results[6] as string;
     const cart = results[7] as Awaited<ReturnType<typeof getCurrentCart>>;
     const entities = results[8] as LeadEntity[];
+    const smartPassiveState = results[9] as SmartPassiveState;
 
-    console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}, activities: ${activities.length}, catalog: ${catalogContext.length} chars, isPaymentQuery: ${isPaymentRelated}, summary len: ${summary.length}, cart items: ${cart?.item_count || 0}, entities: ${entities.length}`);
+    console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}, activities: ${activities.length}, catalog: ${catalogContext.length} chars, isPaymentQuery: ${isPaymentRelated}, summary len: ${summary.length}, cart items: ${cart?.item_count || 0}, entities: ${entities.length}, smartPassive: ${smartPassiveState.isActive}`);
     console.log('[RAG CONTEXT]:', context ? context.substring(0, 500) + '...' : 'NO CONTEXT RETRIEVED');
 
 
@@ -595,6 +598,12 @@ The customer has recently completed an order.
     if (cartContext) {
         systemPrompt += `${cartContext}
 `;
+    }
+
+    // Add Smart Passive context if active (customer needs human attention)
+    const smartPassiveContext = buildSmartPassiveContext(smartPassiveState);
+    if (smartPassiveContext) {
+        systemPrompt += smartPassiveContext;
     }
 
     // Add image context if customer sent an image

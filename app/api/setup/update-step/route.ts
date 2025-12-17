@@ -27,6 +27,20 @@ export async function POST(req: Request) {
             if (data.businessName) updates.business_name = data.businessName;
             if (data.businessDescription) updates.business_description = data.businessDescription;
         }
+
+        if (step === 4 && data) {
+            // Bot Goal - map to primary_goal column
+            if (data.botGoal) {
+                // Map display names to database values
+                const goalMapping: Record<string, string> = {
+                    'Lead Generation': 'lead_generation',
+                    'Appointment Booking': 'appointment_booking',
+                    'Tripping': 'tripping',
+                    'Purchase': 'purchase',
+                };
+                updates.primary_goal = goalMapping[data.botGoal] || 'lead_generation';
+            }
+        }
         // Other steps might not save directly to bot_settings columns but trigger other actions
         // or just update the step counter.
         // Step 2 (Product) -> Handled by separate generate call usually, or saved here if we added columns.

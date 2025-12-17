@@ -30,6 +30,7 @@ export async function GET() {
             humanTakeoverTimeoutMinutes: data.human_takeover_timeout_minutes ?? 5,
             aiModel: data.ai_model || 'qwen/qwen3-235b-a22b',
             splitMessages: data.split_messages ?? false,
+            primaryGoal: data.primary_goal || 'lead_generation',
             // Setup fields
             isSetupCompleted: data.is_setup_completed ?? false,
             setupStep: data.setup_step || 1,
@@ -59,6 +60,7 @@ export async function POST(req: Request) {
         if (body.humanTakeoverTimeoutMinutes !== undefined) updates.human_takeover_timeout_minutes = body.humanTakeoverTimeoutMinutes;
         if (body.aiModel !== undefined) updates.ai_model = body.aiModel;
         if (body.splitMessages !== undefined) updates.split_messages = body.splitMessages;
+        if (body.primaryGoal !== undefined) updates.primary_goal = body.primaryGoal;
 
         // Check if settings row exists
         const { data: existing } = await supabase
@@ -90,6 +92,7 @@ export async function POST(req: Request) {
                     human_takeover_timeout_minutes: body.humanTakeoverTimeoutMinutes ?? 5,
                     ai_model: body.aiModel || 'qwen/qwen3-235b-a22b',
                     split_messages: body.splitMessages ?? false,
+                    primary_goal: body.primaryGoal || 'lead_generation',
                 });
 
             if (error) {
