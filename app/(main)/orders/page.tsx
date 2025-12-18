@@ -14,7 +14,8 @@ import {
     RefreshCw,
     Loader2,
     Truck,
-    CreditCard
+    CreditCard,
+    Phone
 } from 'lucide-react';
 import { Order } from '@/app/lib/orderService';
 import OrderDetailsModal from './OrderDetailsModal';
@@ -272,6 +273,7 @@ export default function OrdersPage() {
                                     <tr className="bg-gray-50/50 border-b border-gray-100 text-xs uppercase tracking-wider text-gray-500 font-semibold">
                                         <th className="px-6 py-4">Order ID</th>
                                         <th className="px-6 py-4">Customer</th>
+                                        <th className="px-6 py-4">Shipping Address</th>
                                         <th className="px-6 py-4">Date</th>
                                         <th className="px-6 py-4">Status</th>
                                         <th className="px-6 py-4">Payment</th>
@@ -280,40 +282,51 @@ export default function OrdersPage() {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-gray-100">
-                                    {filteredOrders.map((order) => (
-                                        <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
-                                            <td className="px-6 py-4">
-                                                <span className="font-mono text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">
-                                                    #{order.id.slice(0, 8)}
-                                                </span>
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                <div className="font-medium text-gray-900">{order.leads?.name || 'Guest'}</div>
-                                                <div className="text-xs text-gray-500">{order.leads?.email}</div>
-                                            </td>
-                                            <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
-                                                {formatDate(order.created_at)}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {getStatusBadge(order.status)}
-                                            </td>
-                                            <td className="px-6 py-4">
-                                                {getPaymentStatusBadge(order.payment_status || 'pending', order.is_cod || false)}
-                                            </td>
-                                            <td className="px-6 py-4 text-right font-medium text-gray-900">
-                                                {formatCurrency(order.total_amount, order.currency)}
-                                            </td>
-                                            <td className="px-6 py-4 text-center">
-                                                <button
-                                                    onClick={() => handleViewOrder(order)}
-                                                    className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all"
-                                                    title="View Details"
-                                                >
-                                                    <Eye size={18} />
-                                                </button>
-                                            </td>
-                                        </tr>
-                                    ))}
+                                    {filteredOrders.map((order) => {
+                                        // Prioritize order-specific contact info, fallback to leads info
+                                        const customerName = order.customer_name || order.leads?.name || 'Guest';
+                                        const customerEmail = order.customer_email || order.leads?.email;
+                                        const customerPhone = order.customer_phone || order.leads?.phone;
+
+                                        return (
+                                            <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <span className="font-mono text-sm text-gray-600 bg-gray-100 px-2 py-1 rounded">
+                                                        #{order.id.slice(0, 8)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <div className="font-medium text-gray-900">{customerName}</div>
+                                                    {customerEmail && <div className="text-xs text-gray-500">{customerEmail}</div>}
+                                                    {customerPhone && <div className="text-xs text-gray-500 flex items-center gap-1 mt-0.5"><Phone size={10} /> {customerPhone}</div>}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-600 max-w-xs truncate" title={order.shipping_address || ''}>
+                                                    {order.shipping_address || <span className="text-gray-400 italic">No address</span>}
+                                                </td>
+                                                <td className="px-6 py-4 text-sm text-gray-500 whitespace-nowrap">
+                                                    {formatDate(order.created_at)}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {getStatusBadge(order.status)}
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    {getPaymentStatusBadge(order.payment_status || 'pending', order.is_cod || false)}
+                                                </td>
+                                                <td className="px-6 py-4 text-right font-medium text-gray-900">
+                                                    {formatCurrency(order.total_amount, order.currency)}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <button
+                                                        onClick={() => handleViewOrder(order)}
+                                                        className="p-2 text-gray-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-all"
+                                                        title="View Details"
+                                                    >
+                                                        <Eye size={18} />
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        );
+                                    })}
                                 </tbody>
                             </table>
                         </div>

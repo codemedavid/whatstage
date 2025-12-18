@@ -1,7 +1,6 @@
-
 'use client';
 
-import { X, Package, User, Phone, Mail, FileText, Calendar, DollarSign, CreditCard, Truck } from 'lucide-react';
+import { X, Package, User, Phone, Mail, FileText, Calendar, DollarSign, CreditCard, Truck, MapPin } from 'lucide-react';
 import { Order } from '@/app/lib/orderService';
 import { useEffect, useState } from 'react';
 
@@ -92,6 +91,11 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
         }
     };
 
+    // Derived customer info
+    const customerName = order.customer_name || order.leads?.name || 'Guest Customer';
+    const customerEmail = order.customer_email || order.leads?.email;
+    const customerPhone = order.customer_phone || order.leads?.phone;
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
@@ -130,27 +134,38 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
                 {/* Body */}
                 <div className="overflow-y-auto p-6 space-y-8">
 
-                    {/* Customer Info */}
+                    {/* Customer Info & Status */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100">
                             <h3 className="text-sm font-semibold text-gray-900 mb-3 flex items-center gap-2">
                                 <User size={16} className="text-teal-600" />
-                                Customer Information
+                                Customer & Shipping
                             </h3>
-                            <div className="space-y-2">
-                                <p className="font-medium text-gray-900">{order.leads?.name || 'Guest Customer'}</p>
-                                {order.leads?.email && (
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                                        <Mail size={14} className="text-gray-400" />
-                                        {order.leads.email}
+                            <div className="space-y-3">
+                                <div>
+                                    <p className="font-medium text-gray-900">{customerName}</p>
+                                    {customerEmail && (
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                                            <Mail size={14} className="text-gray-400" />
+                                            {customerEmail}
+                                        </div>
+                                    )}
+                                    {customerPhone && (
+                                        <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                                            <Phone size={14} className="text-gray-400" />
+                                            {customerPhone}
+                                        </div>
+                                    )}
+                                </div>
+
+                                <div className="pt-2 border-t border-gray-200">
+                                    <div className="flex gap-2 text-sm text-gray-600">
+                                        <MapPin size={14} className="text-gray-400 mt-0.5" />
+                                        <span className="flex-1">
+                                            {order.shipping_address || <span className="text-gray-400 italic">No shipping address provided</span>}
+                                        </span>
                                     </div>
-                                )}
-                                {order.leads?.phone && (
-                                    <div className="flex items-center gap-2 text-sm text-gray-600">
-                                        <Phone size={14} className="text-gray-400" />
-                                        {order.leads.phone}
-                                    </div>
-                                )}
+                                </div>
                             </div>
                         </div>
 
@@ -204,6 +219,13 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
                                 {isCod ? 'COD Order' : 'Mark as COD'}
                             </button>
                         </div>
+
+                        {order.payment_method && (
+                            <div className="mb-3 text-sm">
+                                <span className="text-gray-500 uppercase text-xs font-medium mr-2">Method:</span>
+                                <span className="font-medium text-gray-900">{order.payment_method}</span>
+                            </div>
+                        )}
 
                         <div className="flex flex-col gap-2">
                             <label className="text-xs text-gray-500 font-medium uppercase tracking-wider">Payment Status</label>

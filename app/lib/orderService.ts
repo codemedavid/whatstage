@@ -22,6 +22,11 @@ export interface Order {
     total_amount: number;
     currency: string;
     notes: string | null;
+    shipping_address: string | null;
+    customer_name: string | null;
+    customer_email: string | null;
+    customer_phone: string | null;
+    payment_method: string | null;
     created_at: string;
     updated_at: string;
     leads?: {

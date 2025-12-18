@@ -188,7 +188,7 @@ export default function ProductDetailClient({
             .join(',');
 
         const refPayload = `p_id:${product.id}|vars:${variationString}`;
-        const mmeUrl = `https://m.me/${facebookPageId}?ref=${encodeURIComponent(refPayload)}`;
+        const mmeUrl = `https://www.messenger.com/t/${facebookPageId}?ref=${encodeURIComponent(refPayload)}`;
         window.open(mmeUrl, '_blank');
     };
 

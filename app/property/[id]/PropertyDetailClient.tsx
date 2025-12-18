@@ -68,7 +68,7 @@ export default function PropertyDetailClient({
         }
 
         const refPayload = `prop_id:${property.id}`;
-        const mmeUrl = `https://m.me/${facebookPageId}?ref=${encodeURIComponent(refPayload)}`;
+        const mmeUrl = `https://www.messenger.com/t/${facebookPageId}?ref=${encodeURIComponent(refPayload)}`;
         window.open(mmeUrl, '_blank');
     };
 

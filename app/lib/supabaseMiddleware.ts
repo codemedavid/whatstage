@@ -42,8 +42,10 @@ export async function updateSession(request: NextRequest) {
     const isPublicProductPage = /^\/product\/[^/]+$/.test(request.nextUrl.pathname);
     const isPublicPropertyPage = /^\/property\/[^/]+$/.test(request.nextUrl.pathname);
     const isBookingPage = request.nextUrl.pathname === '/book';
+    const isCheckoutPage = request.nextUrl.pathname === '/checkout';
+    const isStorePage = request.nextUrl.pathname === '/store';
 
-    if (!user && !isLoginPage && !isApiRoute && !isPublicProductPage && !isPublicPropertyPage && !isBookingPage) {
+    if (!user && !isLoginPage && !isApiRoute && !isPublicProductPage && !isPublicPropertyPage && !isBookingPage && !isCheckoutPage && !isStorePage) {
         // Redirect unauthenticated users to login
         const url = request.nextUrl.clone();
         url.pathname = '/login';
