@@ -1,7 +1,7 @@
 
 'use client';
 
-import { X, Package, User, Phone, Mail, FileText, Calendar, DollarSign } from 'lucide-react';
+import { X, Package, User, Phone, Mail, FileText, Calendar, DollarSign, CreditCard, Truck } from 'lucide-react';
 import { Order } from '@/app/lib/orderService';
 import { useEffect, useState } from 'react';
 
@@ -10,15 +10,21 @@ interface OrderDetailsModalProps {
     order: Order | null;
     onClose: () => void;
     onUpdateStatus: (orderId: string, status: string) => Promise<void>;
+    onUpdatePaymentStatus: (orderId: string, paymentStatus: string, isCod?: boolean) => Promise<void>;
 }
 
-export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStatus }: OrderDetailsModalProps) {
+export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStatus, onUpdatePaymentStatus }: OrderDetailsModalProps) {
     const [status, setStatus] = useState<string>('');
+    const [paymentStatus, setPaymentStatus] = useState<string>('');
+    const [isCod, setIsCod] = useState<boolean>(false);
     const [updating, setUpdating] = useState(false);
+    const [updatingPayment, setUpdatingPayment] = useState(false);
 
     useEffect(() => {
         if (order) {
             setStatus(order.status);
+            setPaymentStatus(order.payment_status || 'pending');
+            setIsCod(order.is_cod || false);
         }
     }, [order]);
 
@@ -29,6 +35,21 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
         setUpdating(true);
         await onUpdateStatus(order.id, newStatus);
         setUpdating(false);
+    };
+
+    const handlePaymentStatusChange = async (newPaymentStatus: string) => {
+        setPaymentStatus(newPaymentStatus);
+        setUpdatingPayment(true);
+        await onUpdatePaymentStatus(order.id, newPaymentStatus, isCod);
+        setUpdatingPayment(false);
+    };
+
+    const handleCodToggle = async () => {
+        const newIsCod = !isCod;
+        setIsCod(newIsCod);
+        setUpdatingPayment(true);
+        await onUpdatePaymentStatus(order.id, paymentStatus, newIsCod);
+        setUpdatingPayment(false);
     };
 
     const formatDate = (dateString: string) => {
@@ -60,6 +81,17 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
         }
     };
 
+    const getPaymentStatusColor = (s: string) => {
+        switch (s) {
+            case 'pending': return 'bg-amber-100 text-amber-800 border-amber-200';
+            case 'paid': return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+            case 'failed': return 'bg-red-100 text-red-800 border-red-200';
+            case 'refunded': return 'bg-slate-100 text-slate-800 border-slate-200';
+            case 'cancelled': return 'bg-gray-100 text-gray-800 border-gray-200';
+            default: return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/40 backdrop-blur-sm transition-opacity" onClick={onClose} />
@@ -73,6 +105,12 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
                             <span className={`px-3 py-1 rounded-full text-xs font-semibold border ${getStatusColor(order.status)} uppercase tracking-wide`}>
                                 {order.status}
                             </span>
+                            {isCod && (
+                                <span className="px-2.5 py-1 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200 flex items-center gap-1">
+                                    <Truck size={12} />
+                                    COD
+                                </span>
+                            )}
                         </div>
                         <p className="text-gray-500 text-sm flex items-center gap-2">
                             <span className="font-mono">#{order.id.slice(0, 8)}</span>
@@ -144,6 +182,51 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
                         </div>
                     </div>
 
+                    {/* Payment Status Section */}
+                    <div className="bg-gradient-to-br from-amber-50 to-orange-50 p-5 rounded-2xl border border-amber-100">
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="text-sm font-semibold text-gray-900 flex items-center gap-2">
+                                <CreditCard size={16} className="text-amber-600" />
+                                Payment Information
+                            </h3>
+                            {/* COD Toggle */}
+                            <button
+                                onClick={handleCodToggle}
+                                disabled={updatingPayment}
+                                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all border flex items-center gap-1.5
+                                    ${isCod
+                                        ? 'bg-orange-600 text-white border-orange-600 shadow-md shadow-orange-500/20'
+                                        : 'bg-white text-gray-600 border-gray-200 hover:border-orange-300 hover:bg-orange-50'
+                                    }
+                                `}
+                            >
+                                <Truck size={14} />
+                                {isCod ? 'COD Order' : 'Mark as COD'}
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs text-gray-500 font-medium uppercase tracking-wider">Payment Status</label>
+                            <div className="flex gap-2 flex-wrap">
+                                {['pending', 'paid', 'failed', 'refunded', 'cancelled'].map((s) => (
+                                    <button
+                                        key={s}
+                                        onClick={() => handlePaymentStatusChange(s)}
+                                        disabled={updatingPayment}
+                                        className={`px-3 py-1.5 rounded-lg text-xs font-medium capitalize transition-all border
+                                            ${paymentStatus === s
+                                                ? `${getPaymentStatusColor(s)} shadow-md`
+                                                : 'bg-white text-gray-600 border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                                            }
+                                        `}
+                                    >
+                                        {s}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Order Items */}
                     <div>
                         <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
@@ -198,3 +281,4 @@ export default function OrderDetailsModal({ isOpen, order, onClose, onUpdateStat
         </div>
     );
 }
+

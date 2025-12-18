@@ -686,3 +686,141 @@ SELECT
 FROM response_feedback
 GROUP BY DATE_TRUNC('day', created_at)
 ORDER BY feedback_date DESC;
+
+-- ============================================================================
+-- PAYMENT STATUS AND COD ENHANCEMENT FOR ORDERS
+-- Adds payment tracking and Cash on Delivery (COD) indicator
+-- ============================================================================
+
+-- Create payment_status enum type
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_type WHERE typname = 'payment_status') THEN
+    CREATE TYPE payment_status AS ENUM ('pending', 'paid', 'failed', 'refunded', 'cancelled');
+  END IF;
+END $$;
+
+-- Add payment_status column to orders table
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS payment_status payment_status DEFAULT 'pending';
+
+-- Add is_cod column to identify Cash on Delivery orders
+ALTER TABLE orders ADD COLUMN IF NOT EXISTS is_cod BOOLEAN DEFAULT false;
+
+-- Create index for faster filtering by payment status
+CREATE INDEX IF NOT EXISTS idx_orders_payment_status ON orders(payment_status);
+
+-- Create index for COD orders
+CREATE INDEX IF NOT EXISTS idx_orders_is_cod ON orders(is_cod) WHERE is_cod = true;
+
+-- Comments for documentation
+COMMENT ON COLUMN orders.payment_status IS 'Payment status: pending, paid, failed, refunded, cancelled';
+COMMENT ON COLUMN orders.is_cod IS 'Whether this is a Cash on Delivery order';
+
+-- ============================================================================
+-- LEAD ENTITIES TABLE
+-- Stores structured customer facts (name, preferences, budget) for AI context
+-- ============================================================================
+
+CREATE TABLE IF NOT EXISTS lead_entities (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  sender_id TEXT NOT NULL,
+  entity_type TEXT NOT NULL CHECK (entity_type IN ('name', 'preference', 'budget', 'interest', 'contact', 'custom')),
+  entity_key TEXT NOT NULL,  -- e.g., 'preferred_property_type', 'budget_range', 'full_name'
+  entity_value TEXT NOT NULL,
+  confidence FLOAT DEFAULT 1.0 CHECK (confidence >= 0 AND confidence <= 1),
+  source TEXT DEFAULT 'ai_extraction' CHECK (source IN ('ai_extraction', 'user_provided', 'form_submission', 'manual')),
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW(),
+  UNIQUE(sender_id, entity_type, entity_key)
+);
+
+-- Index for fast retrieval by sender
+CREATE INDEX IF NOT EXISTS idx_lead_entities_sender_id ON lead_entities(sender_id);
+CREATE INDEX IF NOT EXISTS idx_lead_entities_type ON lead_entities(entity_type);
+
+-- Enable RLS
+ALTER TABLE lead_entities ENABLE ROW LEVEL SECURITY;
+
+-- Policy to allow all operations (drop first to avoid duplicate error)
+DROP POLICY IF EXISTS "Allow all operations on lead_entities" ON lead_entities;
+CREATE POLICY "Allow all operations on lead_entities" ON lead_entities
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Trigger for updated_at
+DROP TRIGGER IF EXISTS update_lead_entities_updated_at ON lead_entities;
+CREATE TRIGGER update_lead_entities_updated_at
+  BEFORE UPDATE ON lead_entities
+  FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Add comment
+COMMENT ON TABLE lead_entities IS 'Stores structured customer facts (name, preferences, budget, etc.) extracted from conversations for personalization.';
+COMMENT ON COLUMN lead_entities.entity_type IS 'Category of the entity: name, preference, budget, interest, contact, custom';
+COMMENT ON COLUMN lead_entities.entity_key IS 'Specific key within the type, e.g., full_name, preferred_bedrooms, max_budget';
+COMMENT ON COLUMN lead_entities.confidence IS 'AI confidence score for extracted entities (0-1)';
+COMMENT ON COLUMN lead_entities.source IS 'How the entity was captured: ai_extraction, user_provided, form_submission, manual';
+
+-- ============================================================================
+-- HUMAN TAKEOVER SESSIONS TABLE
+-- Tracks when human agents take over conversations from the bot
+-- ============================================================================
+
+-- Add human_takeover_timeout_minutes to bot_settings if it doesn't exist
+ALTER TABLE bot_settings 
+ADD COLUMN IF NOT EXISTS human_takeover_timeout_minutes INT DEFAULT 5;
+
+-- Create the human takeover sessions table
+CREATE TABLE IF NOT EXISTS human_takeover_sessions (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  lead_sender_id TEXT NOT NULL UNIQUE,
+  last_human_message_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  timeout_minutes INT NOT NULL DEFAULT 5,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Index for fast lookups by sender
+CREATE INDEX IF NOT EXISTS idx_human_takeover_sender ON human_takeover_sessions(lead_sender_id);
+
+-- Enable RLS
+ALTER TABLE human_takeover_sessions ENABLE ROW LEVEL SECURITY;
+
+-- Policy to allow all operations (drop first to avoid duplicate error)
+DROP POLICY IF EXISTS "Allow all operations on human_takeover_sessions" ON human_takeover_sessions;
+CREATE POLICY "Allow all operations on human_takeover_sessions" ON human_takeover_sessions
+  FOR ALL USING (true) WITH CHECK (true);
+
+-- Comments
+COMMENT ON TABLE human_takeover_sessions IS 'Tracks active human agent takeover sessions to pause bot responses';
+COMMENT ON COLUMN human_takeover_sessions.lead_sender_id IS 'Facebook sender PSID of the lead';
+COMMENT ON COLUMN human_takeover_sessions.last_human_message_at IS 'Timestamp of last message from human agent';
+COMMENT ON COLUMN human_takeover_sessions.timeout_minutes IS 'How long to keep bot paused after human message';
+
+-- ============================================================================
+-- SMART PASSIVE MODE FIELDS
+-- Adds columns to leads table for Smart Passive mode (AI detects need for human)
+-- ============================================================================
+
+-- Add needs_human_attention flag
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS needs_human_attention BOOLEAN DEFAULT false;
+
+-- Add timestamp for when Smart Passive mode was activated
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS smart_passive_activated_at TIMESTAMPTZ;
+
+-- Track how many questions in a row went unanswered/repeated
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS unanswered_question_count INT DEFAULT 0;
+
+-- Store the last few questions to detect repetition
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS recent_questions JSONB DEFAULT '[]'::jsonb;
+
+-- Store the reason why Smart Passive was activated (for agent visibility)
+ALTER TABLE leads ADD COLUMN IF NOT EXISTS smart_passive_reason TEXT;
+
+-- Index for quickly finding leads needing human attention
+CREATE INDEX IF NOT EXISTS idx_leads_needs_human_attention ON leads(needs_human_attention) 
+  WHERE needs_human_attention = true;
+
+-- Comments
+COMMENT ON COLUMN leads.needs_human_attention IS 'True when AI has detected customer needs human agent assistance';
+COMMENT ON COLUMN leads.smart_passive_activated_at IS 'Timestamp when Smart Passive mode was activated';
+COMMENT ON COLUMN leads.unanswered_question_count IS 'Count of consecutive questions the AI could not answer satisfactorily';
+COMMENT ON COLUMN leads.recent_questions IS 'JSON array of recent questions for repetition detection';
+COMMENT ON COLUMN leads.smart_passive_reason IS 'Reason why Smart Passive was triggered (for agent visibility)';

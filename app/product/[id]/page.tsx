@@ -94,7 +94,7 @@ async function getRelatedProducts(productId: string, categoryId: string | null):
 // Fetch connected Facebook page
 async function getFacebookPageId(): Promise<string | null> {
     const { data, error } = await supabase
-        .from('facebook_pages')
+        .from('connected_pages')
         .select('page_id')
         .limit(1)
         .single();

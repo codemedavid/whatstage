@@ -14,6 +14,7 @@ import {
     Loader2,
 } from 'lucide-react';
 import Link from 'next/link';
+import { getOrCreateGuestSessionId, getFacebookParams } from '@/app/lib/guestSession';
 
 interface ProductCategory {
     id: string;
@@ -54,8 +55,12 @@ export default function ProductDetailClient({
     facebookPageId,
 }: ProductDetailClientProps) {
     const searchParams = useSearchParams();
-    const senderPsid = searchParams.get('psid') || '';
-    const pageId = searchParams.get('pageId') || '';
+    const urlPsid = searchParams.get('psid');
+    const urlPageId = searchParams.get('pageId');
+
+    // State for Facebook params - will be hydrated from localStorage
+    const [senderPsid, setSenderPsid] = useState('');
+    const [pageId, setPageId] = useState('');
 
     const [selectedImageIndex, setSelectedImageIndex] = useState(0);
     const [isWishlisted, setIsWishlisted] = useState(false);
@@ -65,6 +70,13 @@ export default function ProductDetailClient({
     // Cart state
     const [addingToCart, setAddingToCart] = useState(false);
     const [showAddedToast, setShowAddedToast] = useState(false);
+
+    // On mount, get Facebook params from URL or localStorage
+    useEffect(() => {
+        const { psid, pageId: storedPageId } = getFacebookParams(urlPsid, urlPageId);
+        setSenderPsid(psid);
+        setPageId(storedPageId);
+    }, [urlPsid, urlPageId]);
 
     const productImages = product.image_url ? [product.image_url] : [];
 
@@ -125,11 +137,8 @@ export default function ProductDetailClient({
             return;
         }
 
-        // Require PSID for cart functionality (user must come from chat or have cookie in future)
-        if (!senderPsid) {
-            alert('Please access this page through our Messenger chat to add items to cart.');
-            return;
-        }
+        // Use PSID if available from Messenger, otherwise use guest session ID
+        const sessionId = senderPsid || getOrCreateGuestSessionId();
 
         setAddingToCart(true);
 
@@ -138,7 +147,7 @@ export default function ProductDetailClient({
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    sender_id: senderPsid,
+                    sender_id: sessionId,
                     product_id: product.id,
                     quantity: 1,
                     unit_price: currentPrice || 0,
@@ -280,7 +289,7 @@ export default function ProductDetailClient({
                                 </div>
                             )}
                             {product.description && (
-                                <p className="text-gray-600 leading-relaxed text-lg">
+                                <p className="text-gray-600 leading-relaxed text-lg whitespace-pre-wrap">
                                     {product.description}
                                 </p>
                             )}
@@ -323,29 +332,27 @@ export default function ProductDetailClient({
                         )}
 
                         <div className="flex items-center gap-4 pt-4">
-                            {/* Add to Cart button - shown when user has PSID */}
-                            {senderPsid && (
-                                <button
-                                    onClick={handleAddToCart}
-                                    disabled={addingToCart}
-                                    className="flex-1 bg-emerald-600 text-white px-8 py-4 rounded-full font-semibold hover:bg-emerald-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    {addingToCart ? (
-                                        <>
-                                            <Loader2 size={20} className="animate-spin" />
-                                            Adding...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <ShoppingCart size={20} />
-                                            Add to Cart
-                                        </>
-                                    )}
-                                </button>
-                            )}
+                            {/* Add to Cart button - always shown */}
+                            <button
+                                onClick={handleAddToCart}
+                                disabled={addingToCart}
+                                className="flex-1 bg-emerald-600 text-white px-8 py-4 rounded-full font-semibold hover:bg-emerald-700 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 text-lg flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                            >
+                                {addingToCart ? (
+                                    <>
+                                        <Loader2 size={20} className="animate-spin" />
+                                        Adding...
+                                    </>
+                                ) : (
+                                    <>
+                                        <ShoppingCart size={20} />
+                                        Add to Cart
+                                    </>
+                                )}
+                            </button>
                             <button
                                 onClick={handleChatToBuy}
-                                className={`${senderPsid ? '' : 'flex-1'} bg-gray-900 text-white px-8 py-4 rounded-full font-semibold hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 text-lg flex items-center justify-center gap-2`}
+                                className="bg-gray-900 text-white px-8 py-4 rounded-full font-semibold hover:bg-gray-800 transition-all shadow-lg hover:shadow-xl transform hover:-translate-y-0.5 active:translate-y-0 text-lg flex items-center justify-center gap-2"
                             >
                                 <MessageCircle size={20} />
                                 Chat to Buy

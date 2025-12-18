@@ -12,7 +12,9 @@ import {
     MoreHorizontal,
     Eye,
     RefreshCw,
-    Loader2
+    Loader2,
+    Truck,
+    CreditCard
 } from 'lucide-react';
 import { Order } from '@/app/lib/orderService';
 import OrderDetailsModal from './OrderDetailsModal';
@@ -22,6 +24,7 @@ export default function OrdersPage() {
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
     const [statusFilter, setStatusFilter] = useState<string>('all');
+    const [paymentStatusFilter, setPaymentStatusFilter] = useState<string>('all');
 
     // Modal state
     const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
@@ -70,6 +73,38 @@ export default function OrdersPage() {
         }
     };
 
+    const handleUpdatePaymentStatus = async (orderId: string, paymentStatus: string, isCod?: boolean) => {
+        try {
+            const res = await fetch('/api/orders', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: orderId, payment_status: paymentStatus, is_cod: isCod }),
+            });
+
+            if (res.ok) {
+                const updatedOrder = await res.json();
+
+                // Update local state
+                setOrders(prev => prev.map(o => o.id === orderId ? {
+                    ...o,
+                    payment_status: updatedOrder.payment_status,
+                    is_cod: updatedOrder.is_cod
+                } : o));
+
+                // Update selected order if open
+                if (selectedOrder && selectedOrder.id === orderId) {
+                    setSelectedOrder(prev => prev ? {
+                        ...prev,
+                        payment_status: updatedOrder.payment_status,
+                        is_cod: updatedOrder.is_cod
+                    } : null);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to update payment status:', error);
+        }
+    };
+
     const handleViewOrder = (order: Order) => {
         setSelectedOrder(order);
         setIsModalOpen(true);
@@ -107,6 +142,30 @@ export default function OrdersPage() {
         );
     };
 
+    const getPaymentStatusBadge = (paymentStatus: string, isCod: boolean) => {
+        const styles = {
+            pending: 'bg-amber-100 text-amber-800 border-amber-200',
+            paid: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+            failed: 'bg-red-100 text-red-800 border-red-200',
+            refunded: 'bg-slate-100 text-slate-800 border-slate-200',
+            cancelled: 'bg-gray-100 text-gray-800 border-gray-200',
+        }[paymentStatus] || 'bg-gray-100 text-gray-800 border-gray-200';
+
+        return (
+            <div className="flex items-center gap-1.5">
+                <span className={`px-2.5 py-0.5 rounded-full text-xs font-semibold border ${styles} capitalize`}>
+                    {paymentStatus}
+                </span>
+                {isCod && (
+                    <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-orange-100 text-orange-800 border border-orange-200 flex items-center gap-1">
+                        <Truck size={12} />
+                        COD
+                    </span>
+                )}
+            </div>
+        );
+    };
+
     // Filtering
     const filteredOrders = orders.filter(order => {
         const matchesSearch =
@@ -115,8 +174,9 @@ export default function OrdersPage() {
             order.leads?.email?.toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+        const matchesPaymentStatus = paymentStatusFilter === 'all' || order.payment_status === paymentStatusFilter;
 
-        return matchesSearch && matchesStatus;
+        return matchesSearch && matchesStatus && matchesPaymentStatus;
     });
 
     if (loading) {
@@ -160,21 +220,38 @@ export default function OrdersPage() {
                         />
                     </div>
 
-                    <div className="flex items-center gap-2 w-full sm:w-auto">
-                        <Filter size={16} className="text-gray-400" />
-                        <select
-                            value={statusFilter}
-                            onChange={(e) => setStatusFilter(e.target.value)}
-                            className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-auto p-2.5 px-4 cursor-pointer outline-none"
-                        >
-                            <option value="all">All Statuses</option>
-                            <option value="pending">Pending</option>
-                            <option value="confirmed">Confirmed</option>
-                            <option value="processing">Processing</option>
-                            <option value="shipped">Shipped</option>
-                            <option value="delivered">Delivered</option>
-                            <option value="cancelled">Cancelled</option>
-                        </select>
+                    <div className="flex items-center gap-3 w-full sm:w-auto">
+                        <div className="flex items-center gap-2">
+                            <Filter size={16} className="text-gray-400" />
+                            <select
+                                value={statusFilter}
+                                onChange={(e) => setStatusFilter(e.target.value)}
+                                className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-auto p-2.5 px-4 cursor-pointer outline-none"
+                            >
+                                <option value="all">All Statuses</option>
+                                <option value="pending">Pending</option>
+                                <option value="confirmed">Confirmed</option>
+                                <option value="processing">Processing</option>
+                                <option value="shipped">Shipped</option>
+                                <option value="delivered">Delivered</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <CreditCard size={16} className="text-gray-400" />
+                            <select
+                                value={paymentStatusFilter}
+                                onChange={(e) => setPaymentStatusFilter(e.target.value)}
+                                className="bg-gray-50 border border-gray-200 text-gray-700 text-sm rounded-xl focus:ring-teal-500 focus:border-teal-500 block w-full sm:w-auto p-2.5 px-4 cursor-pointer outline-none"
+                            >
+                                <option value="all">All Payments</option>
+                                <option value="pending">Pending</option>
+                                <option value="paid">Paid</option>
+                                <option value="failed">Failed</option>
+                                <option value="refunded">Refunded</option>
+                                <option value="cancelled">Cancelled</option>
+                            </select>
+                        </div>
                     </div>
                 </div>
 
@@ -197,6 +274,7 @@ export default function OrdersPage() {
                                         <th className="px-6 py-4">Customer</th>
                                         <th className="px-6 py-4">Date</th>
                                         <th className="px-6 py-4">Status</th>
+                                        <th className="px-6 py-4">Payment</th>
                                         <th className="px-6 py-4 text-right">Total</th>
                                         <th className="px-6 py-4 text-center">Actions</th>
                                     </tr>
@@ -218,6 +296,9 @@ export default function OrdersPage() {
                                             </td>
                                             <td className="px-6 py-4">
                                                 {getStatusBadge(order.status)}
+                                            </td>
+                                            <td className="px-6 py-4">
+                                                {getPaymentStatusBadge(order.payment_status || 'pending', order.is_cod || false)}
                                             </td>
                                             <td className="px-6 py-4 text-right font-medium text-gray-900">
                                                 {formatCurrency(order.total_amount, order.currency)}
@@ -245,7 +326,9 @@ export default function OrdersPage() {
                 order={selectedOrder}
                 onClose={() => setIsModalOpen(false)}
                 onUpdateStatus={handleUpdateStatus}
+                onUpdatePaymentStatus={handleUpdatePaymentStatus}
             />
         </div>
     );
 }
+

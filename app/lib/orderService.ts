@@ -17,6 +17,8 @@ export interface Order {
     id: string;
     lead_id: string;
     status: 'pending' | 'confirmed' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+    payment_status: 'pending' | 'paid' | 'failed' | 'refunded' | 'cancelled';
+    is_cod: boolean;
     total_amount: number;
     currency: string;
     notes: string | null;
@@ -141,4 +143,31 @@ export async function deleteOrder(orderId: string) {
     }
 
     return true;
+}
+
+export async function updatePaymentStatus(orderId: string, paymentStatus: string, isCod?: boolean) {
+    const supabase = createClient();
+
+    const updateData: { payment_status: string; is_cod?: boolean } = {
+        payment_status: paymentStatus
+    };
+
+    // Only update is_cod if explicitly provided
+    if (isCod !== undefined) {
+        updateData.is_cod = isCod;
+    }
+
+    const { data, error } = await supabase
+        .from('orders')
+        .update(updateData)
+        .eq('id', orderId)
+        .select()
+        .single();
+
+    if (error) {
+        console.error('Error updating payment status:', error);
+        throw error;
+    }
+
+    return data;
 }

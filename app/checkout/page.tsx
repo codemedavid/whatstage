@@ -2,8 +2,9 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ShoppingCart, ArrowRight, Loader2, MapPin, Phone, User, Check, Trash2, CreditCard, Package } from 'lucide-react';
+import { ShoppingCart, ArrowRight, Loader2, MapPin, Phone, User, Check, Trash2, CreditCard, Package, Mail } from 'lucide-react';
 import Link from 'next/link';
+import { getGuestSessionId, isGuestSession, clearGuestSession, getFacebookParams } from '@/app/lib/guestSession';
 
 interface OrderItem {
     id: string;
@@ -25,8 +26,8 @@ interface Cart {
 function CheckoutContent() {
     const searchParams = useSearchParams();
     const router = useRouter();
-    const psid = searchParams.get('psid');
-    const pageId = searchParams.get('pageId');
+    const urlPsid = searchParams.get('psid');
+    const urlPageId = searchParams.get('pageId');
 
     const [cart, setCart] = useState<Cart | null>(null);
     const [items, setItems] = useState<OrderItem[]>([]);
@@ -34,27 +35,50 @@ function CheckoutContent() {
     const [submitting, setSubmitting] = useState(false);
     const [orderComplete, setOrderComplete] = useState(false);
 
-    // Form state
     const [formData, setFormData] = useState({
         customer_name: '',
         customer_phone: '',
-        customer_email: '', // Optional
+        customer_email: '', // Required for guest checkout
         shipping_address: '',
         payment_method: 'GCash', // Default
         notes: ''
     });
 
+    // Determine the session ID (PSID from URL or guest session from localStorage)
+    const [sessionId, setSessionId] = useState<string | null>(null);
+    const [isGuest, setIsGuest] = useState(false);
+
     useEffect(() => {
-        if (psid) {
+        // Get FB params from URL or storage
+        const { psid: fbPsid, pageId: fbPageId } = getFacebookParams(urlPsid, urlPageId);
+
+        if (fbPsid) {
+            setSessionId(fbPsid);
+            setIsGuest(false);
+        } else {
+            const guestId = getGuestSessionId();
+            setSessionId(guestId);
+            setIsGuest(!!guestId);
+        }
+    }, [urlPsid, urlPageId]);
+
+    useEffect(() => {
+        if (sessionId) {
             fetchCart();
         } else {
-            setLoading(false);
+            // Only stop loading if we're sure there's no session
+            // But with the logic above, we usually try to get one.
+            // If sessionId is still null (e.g. ssr or first render before effect), we wait.
+            // Actually, initial state is null, so this runs when it updates.
+            // If it stays null (no guest session, no fb session), we should probably stop loading.
+            const timeout = setTimeout(() => setLoading(false), 1000);
+            return () => clearTimeout(timeout);
         }
-    }, [psid]);
+    }, [sessionId]);
 
     const fetchCart = async () => {
         try {
-            const res = await fetch(`/api/store/cart?sender_id=${psid}`);
+            const res = await fetch(`/api/store/cart?sender_id=${sessionId}`);
             const data = await res.json();
             if (res.ok && data.cart) {
                 setCart(data.cart);
@@ -75,6 +99,12 @@ function CheckoutContent() {
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!cart) return;
+
+        // Require email for guest checkout
+        if (isGuest && !formData.customer_email) {
+            alert('Please provide an email address so we can send you order updates.');
+            return;
+        }
 
         setSubmitting(true);
 
@@ -106,7 +136,7 @@ function CheckoutContent() {
         if (!confirm(`Remove "${productName}" from your cart?`)) return;
 
         try {
-            const res = await fetch(`/api/store/cart?sender_id=${psid}&item_id=${itemId}`, {
+            const res = await fetch(`/api/store/cart?sender_id=${sessionId}&item_id=${itemId}`, {
                 method: 'DELETE',
             });
 
@@ -131,19 +161,31 @@ function CheckoutContent() {
         );
     }
 
-    if (!psid) {
+    if (!sessionId) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-50 px-4">
                 <div className="text-center">
                     <ShoppingCart className="w-16 h-16 mx-auto text-gray-300 mb-4" />
-                    <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-                    <p className="text-gray-500">Please access your cart through our Facebook Messenger chat.</p>
+                    <h1 className="text-2xl font-bold text-gray-900 mb-2">No Cart Found</h1>
+                    <p className="text-gray-500 mb-6">Start shopping to add items to your cart.</p>
+                    <Link
+                        href="/store"
+                        className="inline-flex items-center gap-2 bg-emerald-600 text-white px-6 py-3 rounded-xl font-semibold hover:bg-emerald-700 transition-colors"
+                    >
+                        <ShoppingCart size={20} />
+                        Browse Store
+                    </Link>
                 </div>
             </div>
         );
     }
 
     if (orderComplete) {
+        // Clear guest session after successful order
+        if (isGuest) {
+            clearGuestSession();
+        }
+
         return (
             <div className="min-h-screen flex items-center justify-center bg-emerald-50 px-4">
                 <div className="max-w-md w-full bg-white p-8 rounded-2xl shadow-xl text-center">
@@ -152,15 +194,18 @@ function CheckoutContent() {
                     </div>
                     <h1 className="text-3xl font-bold text-gray-900 mb-4">Order Confirmed!</h1>
                     <p className="text-gray-600 mb-8">
-                        Thank you for your order, {formData.customer_name}. We will process it shortly and update you via Messenger.
+                        Thank you for your order, {formData.customer_name}.
+                        {isGuest
+                            ? `We'll send order updates to ${formData.customer_email}.`
+                            : 'We will process it shortly and update you via Messenger.'
+                        }
                     </p>
-                    <button
-                        onClick={() => window.close()}
-                        className="w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors"
+                    <Link
+                        href="/store"
+                        className="block w-full bg-gray-900 text-white py-3 rounded-xl font-semibold hover:bg-gray-800 transition-colors text-center"
                     >
-                        Close Window
-                    </button>
-                    <p className="mt-4 text-xs text-gray-400">You can close this page now.</p>
+                        Continue Shopping
+                    </Link>
                 </div>
             </div>
         );
@@ -223,15 +268,21 @@ function CheckoutContent() {
                                         />
                                     </div>
                                     <div className="col-span-2">
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Email (Optional)</label>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                                            Email {isGuest ? '(Required)' : '(Optional)'}
+                                        </label>
                                         <input
                                             type="email"
                                             name="customer_email"
+                                            required={isGuest}
                                             value={formData.customer_email}
                                             onChange={handleInputChange}
                                             className="w-full px-4 py-2 border border-gray-200 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-transparent outline-none transition-all"
                                             placeholder="juan@example.com"
                                         />
+                                        {isGuest && (
+                                            <p className="mt-1 text-xs text-gray-500">We'll send order updates to this email.</p>
+                                        )}
                                     </div>
                                 </div>
                             </div>
