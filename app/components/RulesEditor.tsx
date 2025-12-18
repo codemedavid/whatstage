@@ -1,7 +1,8 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { Save, Bot, Plus, Trash2, ToggleLeft, ToggleRight, Clock, MessageSquare } from 'lucide-react';
+import { Save, Bot, Plus, Trash2, ToggleLeft, ToggleRight, Clock, MessageSquare, RefreshCw } from 'lucide-react';
+import BotGoalSection from '@/app/components/settings/BotGoalSection';
 
 interface Rule {
     id: string;
@@ -17,6 +18,7 @@ export default function RulesEditor() {
     const [aiModel, setAiModel] = useState('qwen/qwen3-235b-a22b');
     const [humanTakeoverTimeout, setHumanTakeoverTimeout] = useState(5);
     const [splitMessages, setSplitMessages] = useState(false);
+    const [autoFollowUpEnabled, setAutoFollowUpEnabled] = useState(false);
     const [instructions, setInstructions] = useState('');
     const [rules, setRules] = useState<Rule[]>([]);
     const [newRule, setNewRule] = useState('');
@@ -41,6 +43,9 @@ export default function RulesEditor() {
             }
             if (data.splitMessages !== undefined) {
                 setSplitMessages(data.splitMessages);
+            }
+            if (data.autoFollowUpEnabled !== undefined) {
+                setAutoFollowUpEnabled(data.autoFollowUpEnabled);
             }
         } catch (error) {
             console.error('Failed to fetch settings:', error);
@@ -74,7 +79,7 @@ export default function RulesEditor() {
                 fetch('/api/settings', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ botName, botTone, aiModel, humanTakeoverTimeoutMinutes: humanTakeoverTimeout, splitMessages }),
+                    body: JSON.stringify({ botName, botTone, aiModel, humanTakeoverTimeoutMinutes: humanTakeoverTimeout, splitMessages, autoFollowUpEnabled }),
                 }),
                 fetch('/api/instructions', {
                     method: 'POST',
@@ -156,6 +161,9 @@ export default function RulesEditor() {
 
             <div className="flex-1 overflow-y-auto bg-white p-6 md:p-8 flex justify-center">
                 <div className="w-full max-w-4xl space-y-8 pb-12">
+
+                    {/* Bot Goal Section */}
+                    <BotGoalSection />
 
                     {/* Bot Identity Card */}
                     <div className="bg-white rounded-[24px] p-8 border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow">
@@ -255,6 +263,40 @@ export default function RulesEditor() {
                                 title={splitMessages ? 'Disable split messages' : 'Enable split messages'}
                             >
                                 {splitMessages ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Auto Follow-Up Settings */}
+                    <div className="bg-white rounded-[24px] p-8 border border-gray-200/60 shadow-sm hover:shadow-md transition-shadow">
+                        <div className="flex items-start gap-4 mb-6">
+                            <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl">
+                                <RefreshCw size={24} />
+                            </div>
+                            <div className="flex-1">
+                                <h3 className="text-lg font-medium text-gray-900">Auto Follow-Up</h3>
+                                <p className="text-gray-500 text-sm mt-1">
+                                    Automatically send follow-up messages to inactive leads.
+                                </p>
+                            </div>
+                        </div>
+
+                        <div className="flex items-center justify-between bg-gray-50 p-4 rounded-2xl border border-gray-100">
+                            <div>
+                                <p className="text-gray-800 font-medium">Enable automatic follow-ups</p>
+                                <p className="text-gray-500 text-xs mt-1">
+                                    When enabled, the bot will proactively message leads who haven&apos;t responded.
+                                </p>
+                            </div>
+                            <button
+                                onClick={() => setAutoFollowUpEnabled(!autoFollowUpEnabled)}
+                                className={`p-2 rounded-lg transition-colors ${autoFollowUpEnabled
+                                    ? 'text-blue-600 bg-blue-100 hover:bg-blue-200'
+                                    : 'text-gray-400 bg-gray-200 hover:bg-gray-300'
+                                    }`}
+                                title={autoFollowUpEnabled ? 'Disable auto follow-up' : 'Enable auto follow-up'}
+                            >
+                                {autoFollowUpEnabled ? <ToggleRight size={28} /> : <ToggleLeft size={28} />}
                             </button>
                         </div>
                     </div>

@@ -1,20 +1,33 @@
 import { NextResponse } from 'next/server';
 import { getLeadsNeedingFollowUp, sendFollowUp } from '@/app/lib/followUpService';
+import { supabase } from '@/app/lib/supabase';
 
 export const dynamic = 'force-dynamic';
 export const maxDuration = 60;
 
 /**
  * Cron job to send follow-up messages to inactive leads
- * Runs every minute via Vercel cron
  * 
- * The ML-based timing ensures we contact leads at optimal times:
- * - Respects active hours (configurable, default 8am-9pm)
- * - Learns from response patterns to optimize timing
- * - Increases intervals progressively for unresponsive leads
+ * Controlled by auto_follow_up_enabled in bot_settings.
+ * Enable/disable via Bot Configuration in the dashboard.
  */
 export async function GET(req: Request) {
     try {
+        // Check if auto follow-up is enabled in settings
+        const { data: settings } = await supabase
+            .from('bot_settings')
+            .select('auto_follow_up_enabled')
+            .limit(1)
+            .single();
+
+        if (!settings?.auto_follow_up_enabled) {
+            console.log('[FollowUpCron] Auto follow-ups disabled in settings.');
+            return NextResponse.json({
+                processed: 0,
+                message: 'Auto follow-ups disabled. Enable in Bot Configuration.'
+            });
+        }
+
         // Verify cron secret to prevent unauthorized access
         const authHeader = req.headers.get('authorization');
         const cronSecret = process.env.CRON_SECRET;

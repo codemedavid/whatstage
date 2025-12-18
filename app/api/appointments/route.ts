@@ -179,14 +179,16 @@ export async function POST(request: NextRequest) {
             // Import dynamically to avoid circular dependencies
             const { callSendAPI } = await import('../webhook/facebookClient');
 
-            // Parse date string manually to avoid UTC conversion issues
+            // Parse date string and format with GMT+8 timezone (Asia/Manila)
+            // This ensures the notification shows the correct date regardless of server timezone
             const [year, month, day] = appointment_date.split('-').map(Number);
-            const dateObj = new Date(year, month - 1, day);
+            const dateObj = new Date(year, month - 1, day, 12, 0, 0); // Set to noon to avoid date boundary issues
 
             const formattedDate = dateObj.toLocaleDateString('en-US', {
                 weekday: 'long',
                 month: 'long',
-                day: 'numeric'
+                day: 'numeric',
+                timeZone: 'Asia/Manila' // GMT+8
             });
 
             // Format time (HH:mm:ss -> h:mm AM/PM)

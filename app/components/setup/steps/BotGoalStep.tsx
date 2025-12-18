@@ -14,10 +14,10 @@ export default function BotGoalStep({ initialData, onNext, isLoading }: BotGoalS
     const [goal, setGoal] = useState(initialData.botGoal || 'Lead Generation');
 
     const goals = [
-        { id: 'Lead Generation', icon: '🎯', title: 'Get Leads', desc: 'Collect contact details' },
-        { id: 'Appointment Booking', icon: '📅', title: 'Bookings', desc: 'Schedule appointments' },
-        { id: 'Customer Support', icon: '💬', title: 'Support', desc: 'Answer FAQs 24/7' },
-        { id: 'Sales', icon: '💰', title: 'Sales', desc: 'Direct purchases' },
+        { id: 'Lead Generation', icon: '🎯', title: 'Lead Generation', desc: 'Collect contact details' },
+        { id: 'Appointment Booking', icon: '📅', title: 'Appointment Booking', desc: 'Schedule appointments' },
+        { id: 'Tripping', icon: '🏠', title: 'Tripping', desc: 'Real estate site visits' },
+        { id: 'Purchase', icon: '💰', title: 'Purchase', desc: 'Direct sales' },
     ];
 
     const handleSubmit = (e: React.FormEvent) => {

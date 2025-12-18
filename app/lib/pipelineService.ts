@@ -601,12 +601,13 @@ export async function moveLeadToAppointmentStage(
                 changed_by: 'appointment_booking',
             });
 
-        // Update lead's current stage
+        // Update lead's current stage and mark goal as met
         const { error: updateError } = await supabase
             .from('leads')
             .update({
                 current_stage_id: appointmentStage.id,
                 ai_classification_reason: `Booked appointment (ID: ${appointmentDetails.appointmentId})`,
+                goal_met_at: new Date().toISOString(),
             })
             .eq('id', lead.id);
 

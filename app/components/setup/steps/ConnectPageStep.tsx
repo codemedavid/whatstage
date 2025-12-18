@@ -1,14 +1,7 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { CheckCircle, Loader2, Facebook } from 'lucide-react';
-
-interface FacebookPageData {
-    id: string;
-    name: string;
-    access_token: string;
-    picture: string | null;
-}
+import { useRouter } from 'next/navigation';
+import { CheckCircle, Settings, ExternalLink } from 'lucide-react';
 
 interface ConnectPageStepProps {
     onNext: (data: Record<string, string | undefined>) => void;
@@ -17,253 +10,54 @@ interface ConnectPageStepProps {
 }
 
 export default function ConnectPageStep({ onNext, isLoading }: ConnectPageStepProps) {
-    const [availablePages, setAvailablePages] = useState<FacebookPageData[]>([]);
-    const [selectedPages, setSelectedPages] = useState<Set<string>>(new Set());
-    const [connecting, setConnecting] = useState(false);
-    const [connected, setConnected] = useState(false);
-    const [error, setError] = useState<string | null>(null);
-    const [fetchingPages, setFetchingPages] = useState(false);
+    const router = useRouter();
 
-    // Check URL params on mount for OAuth callback
-    useEffect(() => {
-        const params = new URLSearchParams(window.location.search);
-        const success = params.get('success');
-        const fbSession = params.get('fb_session');
-        const errorMsg = params.get('error');
-
-        if (errorMsg) {
-            setError(decodeURIComponent(errorMsg));
-            // Clean URL
-            window.history.replaceState({}, '', window.location.pathname);
-        } else if (success && fbSession) {
-            // Fetch pages from session
-            setFetchingPages(true);
-            fetch(`/api/auth/facebook/temp-pages?session_id=${fbSession}`)
-                .then(res => res.json())
-                .then(data => {
-                    if (data.pages && data.pages.length > 0) {
-                        setAvailablePages(data.pages);
-                        // Auto-select all pages
-                        setSelectedPages(new Set(data.pages.map((p: FacebookPageData) => p.id)));
-                    } else {
-                        setError('No Facebook pages found. Make sure you have admin access to at least one page.');
-                    }
-                })
-                .catch(() => {
-                    setError('Failed to fetch pages from session');
-                })
-                .finally(() => {
-                    setFetchingPages(false);
-                    // Clean URL
-                    window.history.replaceState({}, '', window.location.pathname);
-                });
-        }
-    }, []);
-
-    const handleFacebookLogin = () => {
-        // Redirect to Facebook OAuth with returnTo pointing back here
-        // We use the current path as returnTo so callback redirects back to wizard
-        window.location.href = `/api/auth/facebook/login?returnTo=${encodeURIComponent(window.location.pathname)}`;
-    };
-
-    const togglePage = (pageId: string) => {
-        const newSelected = new Set(selectedPages);
-        if (newSelected.has(pageId)) {
-            newSelected.delete(pageId);
-        } else {
-            newSelected.add(pageId);
-        }
-        setSelectedPages(newSelected);
-    };
-
-    const handleConnectPages = async () => {
-        if (selectedPages.size === 0) {
-            setError('Please select at least one page');
-            return;
-        }
-
-        setConnecting(true);
-        setError(null);
-
-        const pagesToConnect = availablePages.filter(p => selectedPages.has(p.id));
-        let allSuccess = true;
-
-        for (const page of pagesToConnect) {
-            try {
-                const res = await fetch('/api/facebook/pages', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        pageId: page.id,
-                        pageName: page.name,
-                        pageAccessToken: page.access_token,
-                        profilePic: page.picture,
-                    }),
-                });
-
-                const data = await res.json();
-                if (!data.success) {
-                    allSuccess = false;
-                    setError(`Failed to connect ${page.name}: ${data.error || 'Unknown error'}`);
-                }
-            } catch {
-                allSuccess = false;
-                setError(`Error connecting ${page.name}`);
-            }
-        }
-
-        setConnecting(false);
-
-        if (allSuccess) {
-            setConnected(true);
-            // Auto-proceed after successful connection
-            setTimeout(() => {
-                onNext({});
-            }, 1500);
-        }
+    const handleGoToSettings = () => {
+        // Complete the wizard first, then redirect to settings
+        onNext({});
+        // Small delay to ensure wizard completion is processed
+        setTimeout(() => {
+            router.push('/settings');
+        }, 500);
     };
 
     const handleFinish = () => {
         onNext({});
     };
 
-    // Show page selector if we have pages
-    if (availablePages.length > 0 && !connected) {
-        return (
-            <div className="flex flex-col h-full justify-between text-center">
-                <div className="space-y-6 flex flex-col items-center">
-                    <div>
-                        <h3 className="text-2xl font-extrabold text-[#112D29]">Select Pages to Connect</h3>
-                        <p className="text-gray-500 mt-2 max-w-xs mx-auto">
-                            Choose which Facebook pages to enable AI responses on.
-                        </p>
-                    </div>
-
-                    {error && (
-                        <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm w-full">
-                            {error}
-                        </div>
-                    )}
-
-                    <div className="w-full space-y-3 max-h-64 overflow-y-auto">
-                        {availablePages.map((page) => (
-                            <button
-                                key={page.id}
-                                type="button"
-                                onClick={() => togglePage(page.id)}
-                                className={`w-full flex items-center gap-4 p-4 rounded-xl border-2 transition-all ${selectedPages.has(page.id)
-                                        ? 'border-emerald-500 bg-emerald-50'
-                                        : 'border-gray-100 bg-white hover:border-gray-200'
-                                    }`}
-                            >
-                                {page.picture ? (
-                                    <img
-                                        src={page.picture}
-                                        alt={page.name}
-                                        className="w-12 h-12 rounded-full object-cover"
-                                    />
-                                ) : (
-                                    <div className="w-12 h-12 rounded-full bg-blue-100 flex items-center justify-center">
-                                        <Facebook className="text-blue-600" size={24} />
-                                    </div>
-                                )}
-                                <div className="flex-1 text-left">
-                                    <p className="font-semibold text-gray-900">{page.name}</p>
-                                    <p className="text-sm text-gray-500">ID: {page.id}</p>
-                                </div>
-                                <div className={`w-6 h-6 rounded-full border-2 flex items-center justify-center ${selectedPages.has(page.id)
-                                        ? 'bg-emerald-500 border-emerald-500'
-                                        : 'border-gray-300'
-                                    }`}>
-                                    {selectedPages.has(page.id) && (
-                                        <CheckCircle className="text-white" size={16} />
-                                    )}
-                                </div>
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                <div className="pt-6 space-y-3">
-                    <button
-                        onClick={handleConnectPages}
-                        disabled={connecting || selectedPages.size === 0}
-                        className="w-full py-4 bg-[#112D29] text-white rounded-xl font-bold hover:bg-emerald-900 transition-all duration-200 disabled:opacity-70 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-                    >
-                        {connecting ? (
-                            <>
-                                <Loader2 className="animate-spin" size={20} />
-                                Connecting...
-                            </>
-                        ) : (
-                            `Connect ${selectedPages.size} Page${selectedPages.size !== 1 ? 's' : ''}`
-                        )}
-                    </button>
-                    <button
-                        onClick={handleFinish}
-                        disabled={connecting}
-                        className="w-full py-3 text-gray-500 hover:text-gray-700 transition-colors text-sm"
-                    >
-                        Skip for now
-                    </button>
-                </div>
-            </div>
-        );
-    }
-
-    // Show success state
-    if (connected) {
-        return (
-            <div className="flex flex-col h-full justify-center items-center text-center">
-                <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center mb-6">
-                    <CheckCircle size={40} />
-                </div>
-                <h3 className="text-2xl font-extrabold text-[#112D29]">Pages Connected!</h3>
-                <p className="text-gray-500 mt-2">
-                    Your AI assistant is now ready to respond to customers.
-                </p>
-            </div>
-        );
-    }
-
-    // Loading pages from session
-    if (fetchingPages) {
-        return (
-            <div className="flex flex-col h-full justify-center items-center text-center">
-                <Loader2 className="animate-spin text-emerald-600 mb-4" size={40} />
-                <p className="text-gray-500">Loading your Facebook pages...</p>
-            </div>
-        );
-    }
-
-    // Default state - show connect button
     return (
         <div className="flex flex-col h-full justify-between text-center">
             <div className="space-y-8 flex flex-col items-center justify-center flex-1">
 
                 <div className="w-20 h-20 bg-emerald-100 text-emerald-600 rounded-full flex items-center justify-center animate-bounce">
-                    <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-                    </svg>
+                    <CheckCircle className="w-10 h-10" />
                 </div>
 
                 <div>
                     <h3 className="text-2xl font-extrabold text-[#112D29]">All Set!</h3>
                     <p className="text-gray-500 mt-2 max-w-xs mx-auto">
-                        Your AI assistant is configured and ready to take over.
+                        Your AI assistant is configured and ready. Connect your Facebook page to start receiving messages.
                     </p>
                 </div>
 
-                {error && (
-                    <div className="bg-red-50 text-red-700 p-3 rounded-xl text-sm w-full max-w-sm">
-                        {error}
+                <div className="w-full max-w-sm space-y-4">
+                    <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                        <div className="flex items-start gap-3">
+                            <div className="p-2 bg-blue-100 rounded-lg">
+                                <Settings size={20} className="text-blue-600" />
+                            </div>
+                            <div className="text-left">
+                                <p className="font-semibold text-gray-900 text-sm">Connect Facebook Page</p>
+                                <p className="text-xs text-gray-500 mt-1">
+                                    You can connect your Facebook page from the Settings page at any time.
+                                </p>
+                            </div>
+                        </div>
                     </div>
-                )}
 
-                <div className="w-full max-w-sm">
                     <button
-                        className="w-full py-3 bg-[#1877F2] text-white rounded-xl font-bold hover:bg-[#166fe5] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 mb-3 group"
-                        onClick={handleFacebookLogin}
+                        className="w-full py-3 bg-[#1877F2] text-white rounded-xl font-bold hover:bg-[#166fe5] shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 group"
+                        onClick={handleGoToSettings}
                     >
                         <span className="bg-white/20 p-1 rounded group-hover:bg-white/30 transition-colors">
                             <svg className="w-5 h-5 fill-current" viewBox="0 0 24 24">
@@ -271,9 +65,10 @@ export default function ConnectPageStep({ onNext, isLoading }: ConnectPageStepPr
                             </svg>
                         </span>
                         Connect Facebook Page
+                        <ExternalLink size={16} className="opacity-70" />
                     </button>
                     <p className="text-xs text-gray-400">
-                        Required to reply to your customers.
+                        Opens Settings page to connect your page.
                     </p>
                 </div>
             </div>

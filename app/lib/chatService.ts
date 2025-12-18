@@ -6,6 +6,7 @@ import { getCatalogContext } from './productRagService';
 import { getCurrentCart, buildCartContextForAI } from './cartContextService';
 import { getLeadEntities, buildEntityContextForAI, extractEntitiesFromMessage, LeadEntity } from './entityTrackingService';
 import { calculateImportance } from './importanceService';
+import { getSmartPassiveState, buildSmartPassiveContext, SmartPassiveState } from './smartPassiveService';
 
 const MAX_HISTORY = 10; // Reduced to prevent context overload
 
@@ -90,6 +91,125 @@ async function getBotInstructions(): Promise<string> {
         console.error('Error fetching bot instructions:', error);
         return '';
     }
+}
+
+// Fetch lead's goal status for goal-driven AI behavior
+interface LeadGoalStatus {
+    goal_met_at: string | null;
+    has_name: boolean;
+    has_email: boolean;
+    has_phone: boolean;
+}
+
+async function getLeadGoalStatus(senderId: string): Promise<LeadGoalStatus> {
+    try {
+        const { data, error } = await supabase
+            .from('leads')
+            .select('goal_met_at, name, email, phone')
+            .eq('sender_id', senderId)
+            .single();
+
+        if (error || !data) {
+            return { goal_met_at: null, has_name: false, has_email: false, has_phone: false };
+        }
+
+        return {
+            goal_met_at: data.goal_met_at,
+            has_name: !!data.name,
+            has_email: !!data.email,
+            has_phone: !!data.phone,
+        };
+    } catch (error) {
+        console.error('Error fetching lead goal status:', error);
+        return { goal_met_at: null, has_name: false, has_email: false, has_phone: false };
+    }
+}
+
+// Build goal-driven prompt context
+function buildGoalPromptContext(
+    primaryGoal: string,
+    goalStatus: LeadGoalStatus,
+    hasProducts: boolean,
+    hasProperties: boolean
+): string {
+    // If goal is already met, instruct AI to stop pursuing
+    if (goalStatus.goal_met_at) {
+        return `
+GOAL STATUS: ✅ COMPLETED
+The customer has already achieved the primary goal (${primaryGoal}). 
+- Do NOT proactively push for bookings, orders, or lead info collection.
+- Only help if the customer explicitly asks for something new.
+- Focus on customer support and answering their questions.
+
+`;
+    }
+
+    // Build goal-specific instructions
+    let goalInstructions = '';
+
+    switch (primaryGoal) {
+        case 'lead_generation':
+            const missing: string[] = [];
+            if (!goalStatus.has_name) missing.push('name');
+            if (!goalStatus.has_email) missing.push('email');
+            if (!goalStatus.has_phone) missing.push('phone');
+
+            if (missing.length > 0) {
+                goalInstructions = `
+PRIMARY GOAL: 🎯 Lead Generation
+Your mission: Naturally collect the customer's ${missing.join(', ')}.
+- Work towards getting their contact details through natural conversation.
+- Don't ask for all at once - be conversational.
+- Once you have their info, thank them and offer to help further.
+
+`;
+            } else {
+                goalInstructions = `
+GOAL STATUS: ✅ Lead info collected (name, email, phone available)
+Focus on helping the customer with their queries now.
+
+`;
+            }
+            break;
+
+        case 'appointment_booking':
+            goalInstructions = `
+PRIMARY GOAL: 📅 Appointment Booking
+Your mission: Guide the customer to book an appointment.
+- When relevant, suggest scheduling: "Gusto mo ba mag-schedule? [SHOW_BOOKING]"
+- Be helpful first, then naturally transition to booking.
+- Once booked, the goal is complete - stop suggesting more bookings.
+
+`;
+            break;
+
+        case 'tripping':
+            goalInstructions = `
+PRIMARY GOAL: 🏠 Property Tripping
+Your mission: Get the customer to schedule a property site visit.
+${hasProperties ? '- Show properties when relevant: [SHOW_PROPERTIES]' : ''}
+- Encourage them to book a tripping/site visit: [SHOW_BOOKING]
+- "Gusto mo ba pumunta para makita mo mismo? [SHOW_BOOKING]"
+
+`;
+            break;
+
+        case 'purchase':
+            goalInstructions = `
+PRIMARY GOAL: 💰 Purchase
+Your mission: Guide the customer to make a purchase.
+${hasProducts ? '- Show products when relevant: [SHOW_PRODUCTS]' : ''}
+- Help them find what they need and encourage checkout.
+- Once they complete an order, the goal is complete.
+
+`;
+            break;
+
+        default:
+            goalInstructions = '';
+    }
+
+    return goalInstructions;
 }
 
 // Payment-related keywords to detect
@@ -398,15 +518,20 @@ export async function getBotResponse(
         getLatestConversationSummary(senderId), // Get long-term context summary
         getCurrentCart(senderId), // Get current cart status
         getLeadEntities(senderId), // Get structured customer facts
+        getSmartPassiveState(senderId), // Get Smart Passive mode state
+        getLeadGoalStatus(senderId), // Get goal completion status
     ]);
 
-    // Deference the promise results correctly (added summary, cart, and entities)
+    // Deference the promise results correctly (added summary, cart, entities, smartPassiveState, and goalStatus)
     const [rules, history, context, instructions, activities, catalogContext] = results.slice(0, 6) as [string[], { role: string; content: string }[], string, string, LeadActivity[], string];
     const summary = results[6] as string;
     const cart = results[7] as Awaited<ReturnType<typeof getCurrentCart>>;
     const entities = results[8] as LeadEntity[];
+    const smartPassiveState = results[9] as SmartPassiveState;
+    const goalStatus = results[10] as LeadGoalStatus;
+    const primaryGoal = settings.primary_goal || 'lead_generation';
 
-    console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}, activities: ${activities.length}, catalog: ${catalogContext.length} chars, isPaymentQuery: ${isPaymentRelated}, summary len: ${summary.length}, cart items: ${cart?.item_count || 0}, entities: ${entities.length}`);
+    console.log(`Parallel fetch took ${Date.now() - startTime}ms - rules: ${rules.length}, history: ${history.length}, activities: ${activities.length}, catalog: ${catalogContext.length} chars, isPaymentQuery: ${isPaymentRelated}, summary len: ${summary.length}, cart items: ${cart?.item_count || 0}, entities: ${entities.length}, smartPassive: ${smartPassiveState.isActive}`);
     console.log('[RAG CONTEXT]:', context ? context.substring(0, 500) + '...' : 'NO CONTEXT RETRIEVED');
 
 
@@ -427,11 +552,13 @@ export async function getBotResponse(
 
     // Only show product tools if products exist AND user hasn't just completed an order
     if (hasProducts && !recentOrder) {
-        uiToolsList += `- [SHOW_PRODUCTS] : When user asks to see items/products or looking for recommendations.\n`;
+        uiToolsList += `- [SHOW_PRODUCTS] : When user wants to BROWSE ALL products/items available.\n`;
+        uiToolsList += `- [RECOMMEND_PRODUCT:product_id] : When recommending a SPECIFIC product based on user preferences. Use the exact product ID from the catalog.\n`;
         uiToolsList += `- [SHOW_CART] : When user asks to see their cart, order, or what they've added. Example: "ano na sa cart ko?" / "what's in my cart?"\n`;
         uiToolsList += `- [REMOVE_CART:product_name] : When user wants to REMOVE an item from their cart. Replace "product_name" with the actual product name they want removed.\n`;
 
-        examplesList += `- Example: "Yes, meron kaming available. Check mo dito: [SHOW_PRODUCTS]"\n`;
+        examplesList += `- Example (browse all): "Yes, meron kaming available. Check mo dito: [SHOW_PRODUCTS]"\n`;
+        examplesList += `- Example (specific recommendation): "Based sa preferences mo, try mo to: [RECOMMEND_PRODUCT:abc123-uuid-here]"\n`;
         examplesList += `- Example: "Okay po, aalisin ko na yan sa cart mo. [REMOVE_CART:Product Name Here]"\n`;
     } else if (hasProducts && recentOrder) {
         // Still allow cart tools but hide SHOW_PRODUCTS from proactive suggestions
@@ -440,8 +567,10 @@ export async function getBotResponse(
     }
 
     if (hasProperties) {
-        uiToolsList += `- [SHOW_PROPERTIES] : When user asks about houses, lots, or properties for sale/rent. This shows a visual card - DO NOT also list property details in text.\n`;
-        examplesList += `- Example: "Meron kaming available na properties! Check mo: [SHOW_PROPERTIES]" (SHORT - no details in text)\n`;
+        uiToolsList += `- [SHOW_PROPERTIES] : When user wants to BROWSE ALL properties available. This shows a visual card carousel.\n`;
+        uiToolsList += `- [RECOMMEND_PROPERTY:property_id] : When recommending a SPECIFIC property based on user preferences (bedrooms, budget, location). Use the exact property ID from the catalog. Shows only that one property card.\n`;
+        examplesList += `- Example (browse all): "Meron kaming available na properties! Check mo: [SHOW_PROPERTIES]"\n`;
+        examplesList += `- Example (specific recommendation): "Base sa budget mo, try mo tingnan to: [RECOMMEND_PROPERTY:abc123-uuid-here]"\n`;
     }
 
     // General tools - conditionally show booking based on recent activity
@@ -469,7 +598,16 @@ CRITICAL RULES:
 - DO NOT sign off your messages (e.g., "WhatStage PH", "Galaxy Coffee"). Just send the message.
 - If asking to book/schedule, ALWAYS use [SHOW_BOOKING]. DO NOT say "click this link".
 - DO NOT list options if you don't have their specific names. NEVER say "Pwede kang mag-choose: , , ,".
+- When user asks about a SPECIFIC product/property by name or describes their preferences, use [RECOMMEND_PRODUCT:id] or [RECOMMEND_PROPERTY:id] with the matching item's ID from the catalog.
+- When user wants to see ALL available items, use [SHOW_PRODUCTS] or [SHOW_PROPERTIES].
+- Keep your text message SHORT when using recommendation tags - the card will show all the details.
 `;
+
+    // Inject goal-driven context
+    const goalContext = buildGoalPromptContext(primaryGoal, goalStatus, !!hasProducts, !!hasProperties);
+    if (goalContext) {
+        systemPrompt += goalContext;
+    }
 
     if (hasProducts) {
         systemPrompt += `
@@ -595,6 +733,12 @@ The customer has recently completed an order.
     if (cartContext) {
         systemPrompt += `${cartContext}
 `;
+    }
+
+    // Add Smart Passive context if active (customer needs human attention)
+    const smartPassiveContext = buildSmartPassiveContext(smartPassiveState);
+    if (smartPassiveContext) {
+        systemPrompt += smartPassiveContext;
     }
 
     // Add image context if customer sent an image
